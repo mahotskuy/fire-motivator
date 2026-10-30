@@ -1,0 +1,394 @@
+import { useRef, useState } from "react";
+import { buyOrUpdateAsset } from "../domain/calc";
+import { IBKR_SCREENSHOT_ASSETS } from "../domain/defaults";
+import type { Asset } from "../domain/types";
+import { ETF_CATALOG, QUICK_PICKS_IBKR, QUICK_PICKS_OTHER, findCatalogItem } from "../services/catalog";
+import { fetchTickerPrice, getKnownPrice, getLiveQuote } from "../services/quotes";
+import type { Notify } from "./Toasts";
+
+interface Props {
+  assets: Asset[];
+  monthlySave: number;
+  onChange: (fn: (assets: Asset[]) => Asset[]) => void;
+  notify: Notify;
+}
+
+const cellClass =
+  "bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg px-2 py-1 text-xs focus:outline-none";
+const field =
+  "w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs focus:outline-none";
+
+export function AssetsPanel({ assets, monthlySave, onChange, notify }: Props) {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refreshAll = async () => {
+    if (!assets.length) return;
+    setRefreshing(true);
+    notify("🌐 Оновлюю ринкові котирування всіх ETF...", "indigo");
+    const prices = new Map<string, number>();
+    for (const a of assets) {
+      const res = await fetchTickerPrice(a.ticker, a.marketPrice);
+      if (res && res.price > 0) prices.set(a.ticker, res.price);
+    }
+    onChange((list) => list.map((a) => (prices.has(a.ticker) ? { ...a, marketPrice: prices.get(a.ticker)! } : a)));
+    setRefreshing(false);
+    notify("✅ Ціни ETF оновлено та збережено!");
+  };
+
+  const editField = (ticker: string, key: "shares" | "avgBuyPrice" | "marketPrice", raw: string) => {
+    const num = Number(raw);
+    if (raw === "" || Number.isNaN(num) || num < 0) return;
+    const current = assets.find((a) => a.ticker === ticker);
+    if (!current || current[key] === num) return;
+    onChange((list) => list.map((a) => (a.ticker === ticker ? { ...a, [key]: num } : a)));
+    notify(`☁️ Збережено ${ticker} (${key}: ${num})`);
+  };
+
+  const remove = (ticker: string) => {
+    onChange((list) => list.filter((a) => a.ticker !== ticker));
+    notify(`🗑️ ${ticker} видалено з портфеля!`, "amber");
+  };
+
+  const loadPreset = () => {
+    onChange(() => IBKR_SCREENSHOT_ASSETS.map((a) => ({ ...a })));
+    notify("📲 Портфель оновлено точними позиціями зі скріншоту IBKR!");
+  };
+
+  return (
+    <div className="lg:col-span-7 bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between shadow-lg">
+      <div>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+          <div>
+            <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+              <span>📈</span> Портфель Interactive Brokers (<code className="text-xs text-emerald-400">Assets</code>)
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Редагуй кількість акцій (Shares) або ціну — при втраті фокусу зміни зберігаються автоматично
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={loadPreset}
+              className="text-xs bg-indigo-950/90 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/80 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5"
+              title="Встановити точні позиції та ціни зі скріншоту IBKR ($70,416.49)"
+            >
+              <span>📲</span> Синхронізувати зі скріншотом IBKR
+            </button>
+            <button
+              type="button"
+              onClick={refreshAll}
+              disabled={refreshing}
+              className="text-xs bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/80 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 disabled:opacity-60"
+            >
+              <span className={refreshing ? "animate-spin" : ""}>🌐</span> Оновити ціни
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr className="border-b border-slate-800 text-[11px] text-slate-400 uppercase">
+                <th className="pb-2.5 pr-2">Інструмент</th>
+                <th className="pb-2.5 px-2">Позиція (Shares)</th>
+                <th className="pb-2.5 px-2">Сер. купівля ($)</th>
+                <th className="pb-2.5 px-2">Last Price ($)</th>
+                <th className="pb-2.5 px-2 text-right">Вартість</th>
+                <th className="pb-2.5 pl-2 text-right">P&L</th>
+                <th className="pb-2.5 pl-2 text-right" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {assets.map((asset) => {
+                const shares = Number(asset.shares) || 0;
+                const val = shares * (Number(asset.marketPrice) || 0);
+                const cost = shares * (Number(asset.avgBuyPrice) || 0);
+                const pnl = val - cost;
+                const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
+                return (
+                  <tr key={asset.ticker} className="hover:bg-slate-800/30 transition">
+                    <td className="py-2.5 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-extrabold text-white">{asset.ticker}</span>
+                        <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-semibold">
+                          {findCatalogItem(asset.ticker)?.exchange ?? "IBKR"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-2">
+                      <NumberCell value={asset.shares} onCommit={(v) => editField(asset.ticker, "shares", v)} className="w-20 text-white font-semibold" />
+                    </td>
+                    <td className="py-2.5 px-2">
+                      <NumberCell value={asset.avgBuyPrice} onCommit={(v) => editField(asset.ticker, "avgBuyPrice", v)} className="w-20 text-slate-300" />
+                    </td>
+                    <td className="py-2.5 px-2">
+                      <NumberCell value={asset.marketPrice} onCommit={(v) => editField(asset.ticker, "marketPrice", v)} className="w-24 text-emerald-400 font-bold" />
+                    </td>
+                    <td className="py-2.5 px-2 text-right font-bold text-white">
+                      ${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className={`py-2.5 pl-2 text-right text-xs font-semibold ${pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {pnl >= 0 ? "+" : ""}${pnl.toFixed(0)} ({pnlPct.toFixed(1)}%)
+                    </td>
+                    <td className="py-2.5 pl-2 text-right">
+                      <button type="button" onClick={() => remove(asset.ticker)} className="text-slate-500 hover:text-rose-400 text-xs px-1.5 py-0.5 rounded" title="Видалити з портфеля">
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <AddAssetForm assets={assets} monthlySave={monthlySave} onChange={onChange} notify={notify} />
+    </div>
+  );
+}
+
+function NumberCell({ value, onCommit, className }: { value: number; onCommit: (raw: string) => void; className: string }) {
+  return (
+    <input
+      key={value}
+      type="number"
+      step="0.01"
+      defaultValue={value}
+      onBlur={(e) => onCommit(e.target.value)}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      className={`${cellClass} ${className}`}
+    />
+  );
+}
+
+function AddAssetForm({ assets, monthlySave, onChange, notify }: Props) {
+  const [ticker, setTicker] = useState("");
+  const [shares, setShares] = useState("");
+  const [price, setPrice] = useState("");
+  const [status, setStatus] = useState("Готово до вводу");
+  const [open, setOpen] = useState(false);
+  const [, bump] = useState(0);
+  const tickerRef = useRef("");
+  const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const preview = (Number(shares) || 0) * (Number(price) || 0);
+  const query = ticker.trim().toUpperCase();
+
+  const changeTicker = (value: string) => {
+    tickerRef.current = value;
+    setTicker(value);
+  };
+
+  const applySelection = async (raw: string, force: boolean) => {
+    const clean = raw.trim().toUpperCase();
+    if (!clean) {
+      setStatus("Готово до вводу");
+      return;
+    }
+    if (!shares || Number(shares) <= 0) setShares("1");
+
+    const known = getKnownPrice(clean);
+    if (known && (force || !price)) setPrice(String(known));
+    setStatus(`⏳ Запитую актуальну ціну ${clean} з біржі...`);
+
+    if (force) {
+      const res = await fetchTickerPrice(clean, assets.find((a) => a.ticker === clean)?.marketPrice);
+      if (res && res.price > 0) {
+        setPrice(String(res.price));
+        setStatus(`🟢 ${clean}: $${res.price} (${res.source})`);
+        bump((n) => n + 1);
+      }
+    }
+  };
+
+  const select = (value: string) => {
+    const clean = value.trim().toUpperCase();
+    changeTicker(clean);
+    setOpen(false);
+    void applySelection(clean, true);
+  };
+
+  const onTyping = (raw: string) => {
+    changeTicker(raw);
+    setOpen(true);
+    void applySelection(raw, false);
+
+    clearTimeout(debounce.current);
+    const clean = raw.trim().toUpperCase();
+    if (clean.length < 2) return;
+    debounce.current = setTimeout(async () => {
+      const res = await fetchTickerPrice(clean);
+      if (!res || res.price <= 0) return;
+      bump((n) => n + 1);
+      if (tickerRef.current.trim().toUpperCase() === clean) {
+        setPrice(String(res.price));
+        setStatus(`🟢 Live ${clean}: $${res.price} (${res.source})`);
+      }
+    }, 350);
+  };
+
+  const openDropdown = () => {
+    setOpen(true);
+    const targets = filterCatalog(query).slice(0, 6).filter((i) => getLiveQuote(i.ticker) === undefined);
+    void Promise.allSettled(targets.map((i) => fetchTickerPrice(i.ticker))).then(() => bump((n) => n + 1));
+  };
+
+  const fillMonthlySave = () => {
+    let p = Number(price);
+    if (!p || p <= 0) {
+      const known = query ? getKnownPrice(query) : undefined;
+      if (known) {
+        p = known;
+        setPrice(String(known));
+      }
+    }
+    if (!p || p <= 0) {
+      notify("Спочатку обери ETF або вкажи його ціну!", "amber");
+      return;
+    }
+    setShares((monthlySave / p).toFixed(2));
+  };
+
+  const submit = () => {
+    if (!query) {
+      notify("⚠️ Введи тікер ETF або клікни на кнопку (напр. IXUS)!", "amber");
+      return;
+    }
+    const qty = Number(shares) > 0 ? Number(shares) : 1;
+    const unit = Number(price) > 0 ? Number(price) : (getKnownPrice(query) ?? 100);
+
+    onChange((list) => buyOrUpdateAsset(list, query, qty, unit));
+    changeTicker("");
+    setShares("");
+    setPrice("");
+    setOpen(false);
+    setStatus(`✅ Додано ${query}!`);
+    notify(`🚀 Додано ${qty} шт. ${query} по $${unit}!`);
+  };
+
+  return (
+    <div className="mt-5 pt-4 border-t border-slate-800 bg-slate-950/70 p-4 rounded-xl space-y-3">
+      <div className="flex flex-wrap justify-between items-center gap-2">
+        <span className="text-xs font-bold text-slate-200">➕ Додати ETF / акцію в портфель (обери зі списку або введи тікер):</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-emerald-400 font-medium">{status}</span>
+          <span className="text-xs text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-0.5 rounded-lg">
+            Сума: ${preview.toFixed(2)}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] text-slate-400 mr-1">Твої ETF (IBKR):</span>
+        {QUICK_PICKS_IBKR.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => select(t)}
+            className="text-[11px] bg-slate-800 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/60 px-2.5 py-1 rounded-lg font-bold transition"
+          >
+            {t} (${findCatalogItem(t)?.price.toFixed(2)})
+          </button>
+        ))}
+        {QUICK_PICKS_OTHER.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => select(t)}
+            className="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2 py-1 rounded-lg font-semibold transition"
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center relative">
+        <div className="sm:col-span-4 relative">
+          <input
+            type="text"
+            autoComplete="off"
+            placeholder="🔍 Пошук ETF (IXUS, VOO...)"
+            value={ticker}
+            onFocus={openDropdown}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            onChange={(e) => onTyping(e.target.value)}
+            className={`${field} text-white font-bold uppercase`}
+          />
+          {open && <EtfDropdown query={query} onSelect={select} />}
+        </div>
+
+        <div className="sm:col-span-2">
+          <input type="number" step="0.01" min="0.0001" placeholder="К-сть (1)" value={shares} onChange={(e) => setShares(e.target.value)} className={`${field} text-white font-semibold`} />
+        </div>
+
+        <div className="sm:col-span-3 relative flex items-center">
+          <input type="number" step="0.01" min="0.01" placeholder="Ціна ($)" value={price} onChange={(e) => setPrice(e.target.value)} className={`${field} pr-8 text-emerald-300 font-bold`} />
+          <button type="button" onClick={() => query && void applySelection(query, true)} title="Підтягнути свіжу ціну з ринку" className="absolute right-2 text-slate-400 hover:text-emerald-400 text-xs">
+            🔄
+          </button>
+        </div>
+
+        <div className="sm:col-span-1">
+          <button
+            type="button"
+            onClick={fillMonthlySave}
+            className="w-full bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 rounded-xl px-2 py-2 text-[11px] font-bold transition"
+            title="Розрахувати кількість акцій на суму місячного внеску"
+          >
+            ${monthlySave}
+          </button>
+        </div>
+
+        <div className="sm:col-span-2">
+          <button type="button" onClick={submit} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl px-3 py-2 text-xs transition shadow-md shadow-emerald-950">
+            + Додати
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function filterCatalog(q: string) {
+  return ETF_CATALOG.filter((i) => !q || i.ticker.includes(q) || i.name.toUpperCase().includes(q) || i.exchange.includes(q));
+}
+
+function EtfDropdown({ query, onSelect }: { query: string; onSelect: (ticker: string) => void }) {
+  const items = filterCatalog(query);
+  const customPrice = query ? getKnownPrice(query) : undefined;
+
+  return (
+    <div className="absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-56 overflow-y-auto z-30 divide-y divide-slate-800/70">
+      {items.map((item) => (
+        <button
+          key={item.ticker}
+          type="button"
+          onMouseDown={() => onSelect(item.ticker)}
+          className="w-full text-left px-3 py-2 hover:bg-slate-800 flex justify-between items-center gap-2 transition"
+        >
+          <div>
+            <span className="font-extrabold text-white text-xs">{item.ticker}</span>
+            <span className="text-[10px] bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded ml-1">{item.exchange}</span>
+            {getLiveQuote(item.ticker) !== undefined && (
+              <span className="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1 py-0.5 rounded ml-1">🟢 Live</span>
+            )}
+            <span className="block text-[11px] text-slate-400 truncate max-w-[220px]">{item.name}</span>
+          </div>
+          <span className="text-xs font-bold text-emerald-400 shrink-0">${(getKnownPrice(item.ticker) ?? item.price).toFixed(2)}</span>
+        </button>
+      ))}
+      {query && !items.some((i) => i.ticker === query) && (
+        <button
+          type="button"
+          onMouseDown={() => onSelect(query)}
+          className="w-full text-left px-3 py-2 hover:bg-slate-800 flex justify-between items-center text-xs text-amber-300 font-bold"
+        >
+          <span>➕ Обрати тікер "{query}" (живий запит з біржі)</span>
+          <span>{customPrice ? `$${customPrice.toFixed(2)} 🟢` : "⏳ Пошук ціни..."}</span>
+        </button>
+      )}
+    </div>
+  );
+}
