@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import { buyOrUpdateAsset } from "../domain/calc";
-import { IBKR_SCREENSHOT_ASSETS } from "../domain/defaults";
 import type { Asset } from "../domain/types";
 import { ETF_CATALOG, QUICK_PICKS_IBKR, QUICK_PICKS_OTHER, findCatalogItem } from "../services/catalog";
 import { fetchTickerPrice, getKnownPrice, getLiveQuote } from "../services/quotes";
@@ -49,11 +48,6 @@ export function AssetsPanel({ assets, monthlySave, onChange, notify }: Props) {
     notify(`🗑️ ${ticker} видалено з портфеля!`, "amber");
   };
 
-  const loadPreset = () => {
-    onChange(() => IBKR_SCREENSHOT_ASSETS.map((a) => ({ ...a })));
-    notify("📲 Портфель оновлено точними позиціями зі скріншоту IBKR!");
-  };
-
   return (
     <div className="lg:col-span-7 bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between shadow-lg">
       <div>
@@ -67,14 +61,6 @@ export function AssetsPanel({ assets, monthlySave, onChange, notify }: Props) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={loadPreset}
-              className="text-xs bg-indigo-950/90 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/80 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5"
-              title="Встановити точні позиції та ціни зі скріншоту IBKR ($70,416.49)"
-            >
-              <span>📲</span> Синхронізувати зі скріншотом IBKR
-            </button>
             <button
               type="button"
               onClick={refreshAll}

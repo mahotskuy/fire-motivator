@@ -19,5 +19,4 @@ npm run build      # typecheck + production build into dist/
 - `src/storage` – persistence interface and adapters
 - `src/services` – ETF catalog and live quotes
 - `src/hooks/useFireState.ts` – app state with debounced autosave
-- `src/components` – UI panels
-- `legacy/index.html` – the original single-file prototype, kept for reference (incomplete: the file is truncated)
+- `src/components` – UI panels

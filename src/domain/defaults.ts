@@ -7,13 +7,11 @@ export interface BillLevel {
   baseCost: number;
 }
 
-// Точний пресет позицій зі скріншоту Interactive Brokers ($70,416.49)
-export const IBKR_SCREENSHOT_ASSETS: Asset[] = [
-  { ticker: "IVV", shares: 51, avgBuyPrice: 695.0, marketPrice: 768.0 },
-  { ticker: "IXUS", shares: 158, avgBuyPrice: 84.5, marketPrice: 93.74 },
-  { ticker: "VWO", shares: 192, avgBuyPrice: 51.2, marketPrice: 56.6 },
-  { ticker: "VWOB", shares: 75, avgBuyPrice: 61.8, marketPrice: 64.07 },
-  { ticker: "VWRA", shares: 4, avgBuyPrice: 176.0, marketPrice: 191.28 },
+// Приклад портфеля для першого запуску; реальні дані вводяться в браузері
+const SAMPLE_ASSETS: Asset[] = [
+  { ticker: "VOO", shares: 10, avgBuyPrice: 600.0, marketPrice: 704.5 },
+  { ticker: "VXUS", shares: 40, avgBuyPrice: 65.0, marketPrice: 74.8 },
+  { ticker: "SCHD", shares: 30, avgBuyPrice: 80.0, marketPrice: 89.2 },
 ];
 
 // Базова сума = $1,000/міс, масштабується пропорційно до цільового доходу
@@ -36,27 +34,24 @@ export function createDefaultState(): AppState {
       currentAge: 31,
       planStartDate: "2024-01-01",
     },
-    assets: IBKR_SCREENSHOT_ASSETS.map((a) => ({ ...a })),
+    assets: SAMPLE_ASSETS.map((a) => ({ ...a })),
     snapshots: [
       {
-        id: "snap-prev-month",
-        date: "2026-09-29",
-        timestamp: "2026-09-29T18:00:00.000Z",
-        totalMarketValue: 68450.0,
-        totalCostBasis: 63522.0,
-        positionsSummary: "IVV (50), IXUS (155), VWO (192), VWOB (75), VWRA (4)",
-        note: "Вересневий снепшот статків",
+        id: "snap-sample",
+        date: "2026-09-30",
+        timestamp: "2026-09-30T18:00:00.000Z",
+        totalMarketValue: 11000.0,
+        totalCostBasis: 10200.0,
+        positionsSummary: "VOO (10), VXUS (40), SCHD (30)",
+        note: "Приклад снепшоту",
       },
     ],
     goals: [
-      { name: "🛡️ Фінансова подушка", targetAmount: 6000, targetDate: "2026-12-31" },
-      { name: "🏠 Оснащення дому", targetAmount: 4500, targetDate: "2027-06-01" },
-      { name: "🏔️ Відпустка в горах", targetAmount: 1500, targetDate: "2027-02-15" },
+      { name: "🛡️ Фінансова подушка", targetAmount: 3000, targetDate: "2027-06-30" },
+      { name: "🏔️ Відпустка", targetAmount: 1000, targetDate: "2027-08-01" },
     ],
     transactions: [
-      { date: "2026-08-10", goalName: "🛡️ Фінансова подушка", amount: 6000, note: "Повністю закрито" },
-      { date: "2026-09-05", goalName: "🏠 Оснащення дому", amount: 1800, note: "Меблі" },
-      { date: "2026-10-05", goalName: "🏔️ Відпустка в горах", amount: 800, note: "Бронювання" },
+      { date: "2026-09-05", goalName: "🛡️ Фінансова подушка", amount: 500, note: "Приклад" },
     ],
   };
 }
