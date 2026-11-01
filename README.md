@@ -2,7 +2,7 @@
 
 Personal dashboard for tracking progress to financial independence (FIRE): $1,000/month passive income, IBKR portfolio, wealth snapshots, side goals.
 
-Vite + React + TypeScript + Tailwind. Data is stored in the browser (`localStorage`) behind the `StateStorage` interface; cloud sync is in [docs/BACKLOG.md](docs/BACKLOG.md).
+Vite + React + TypeScript + Tailwind. Data is stored in Firestore (`users/{uid}`) after Google sign-in when the `VITE_FIREBASE_*` variables are set (see `.env.example`; in GitHub: Settings → Secrets and variables → Actions → Variables). Without them the app falls back to browser `localStorage`. Rules: `firestore.rules`. Backlog: [docs/BACKLOG.md](docs/BACKLOG.md).
 
 ## Commands
 

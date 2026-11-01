@@ -10,20 +10,27 @@ const SAVE_DEBOUNCE_MS = 400;
 export function useFireState(storage: StateStorage) {
   const [state, setState] = useState<AppState>(createDefaultState);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
   const latest = useRef(state);
   const dirty = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
-    storage.load().then((saved) => {
-      if (cancelled) return;
-      if (saved) {
-        latest.current = saved;
-        setState(saved);
-      }
-      setLoaded(true);
-    });
+    storage
+      .load()
+      .then((saved) => {
+        if (cancelled) return;
+        if (saved) {
+          latest.current = saved;
+          setState(saved);
+        }
+        setLoaded(true);
+      })
+      .catch(() => {
+        // Без успішного читання не вмикаємо збереження, щоб не затерти хмарні дані
+        if (!cancelled) setLoadError(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -67,5 +74,5 @@ export function useFireState(storage: StateStorage) {
     };
   }, [flush]);
 
-  return { state, update, loaded, status };
+  return { state, update, loaded, loadError, status };
 }

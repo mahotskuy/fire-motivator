@@ -9,19 +9,67 @@ import { ToastContainer, useToasts } from "./components/Toasts";
 import { getFireProgress, getFireRules, getPortfolioTotals } from "./domain/calc";
 import { normalizeState } from "./domain/defaults";
 import type { AppState } from "./domain/types";
+import { SignInScreen } from "./components/SignInScreen";
+import { db, isFirebaseConfigured } from "./firebase/client";
+import { useAuth } from "./hooks/useAuth";
 import { useFireState } from "./hooks/useFireState";
+import type { StateStorage } from "./storage/StateStorage";
+import { createFirestoreStorage } from "./storage/firestoreStorage";
 import { localStorageStorage } from "./storage/localStorageStorage";
 
-const storage = localStorageStorage;
-
 export default function App() {
-  const { state, update, loaded, status } = useFireState(storage);
+  const auth = useAuth();
+
+  if (!isFirebaseConfigured) return <Dashboard storage={localStorageStorage} />;
+  if (!auth.ready) return null;
+  if (!auth.user) return <SignInScreen onSignIn={auth.signIn} error={auth.error} />;
+
+  return (
+    <CloudDashboard
+      key={auth.user.uid}
+      uid={auth.user.uid}
+      email={auth.user.email ?? ""}
+      onSignOut={auth.signOutUser}
+    />
+  );
+}
+
+function CloudDashboard({ uid, email, onSignOut }: { uid: string; email: string; onSignOut: () => void }) {
+  const storage = useMemo(() => createFirestoreStorage(db!, uid), [uid]);
+  return <Dashboard storage={storage} account={{ email, uid, onSignOut }} />;
+}
+
+interface Account {
+  email: string;
+  uid: string;
+  onSignOut: () => void;
+}
+
+function Dashboard({ storage, account }: { storage: StateStorage; account?: Account }) {
+  const { state, update, loaded, loadError, status } = useFireState(storage);
   const { toasts, notify } = useToasts();
 
   const rules = useMemo(() => getFireRules(state.settings), [state.settings]);
   const totals = useMemo(() => getPortfolioTotals(state.assets), [state.assets]);
   const progress = useMemo(() => getFireProgress(rules, totals), [rules, totals]);
 
+  if (loadError) {
+    return (
+      <div className="p-8 text-center text-sm text-rose-300 space-y-3">
+        <p>⚠️ Не вдалося завантажити дані з хмари (перевір правила Firestore та свій UID).</p>
+        {account && (
+          <p className="text-slate-400">
+            Твій UID: <code className="select-all text-slate-200">{account.uid}</code>
+          </p>
+        )}
+        {account && (
+          <button type="button" onClick={account.onSignOut} className="underline text-slate-300">
+            Вийти
+          </button>
+        )}
+      </div>
+    );
+  }
   if (!loaded) return null;
 
   const patch = <K extends keyof AppState>(key: K, fn: (prev: AppState[K]) => AppState[K]) =>
@@ -52,6 +100,17 @@ export default function App() {
     <div className="p-3 sm:p-6 lg:p-8">
       <ToastContainer toasts={toasts} />
       <div className="max-w-7xl mx-auto space-y-6">
+        {account && (
+          <div className="flex flex-wrap justify-end items-center gap-3 text-[11px] text-slate-400">
+            <span>{account.email}</span>
+            <span>
+              UID: <code className="select-all text-slate-300">{account.uid}</code>
+            </span>
+            <button type="button" onClick={account.onSignOut} className="underline hover:text-slate-200">
+              Вийти
+            </button>
+          </div>
+        )}
         <Header
           rules={rules}
           totals={totals}
