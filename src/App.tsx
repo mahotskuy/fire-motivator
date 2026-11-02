@@ -193,6 +193,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             balances={balances}
             targetFireCapital={rules.targetFireCapital}
             onGoalsChange={(fn) => patch("goals", fn)}
+            onTransactionsChange={(fn) => patch("transactions", fn)}
             notify={notify}
           />
           <TransactionsPanel

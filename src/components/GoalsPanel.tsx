@@ -2,7 +2,7 @@ import { useState } from "react";
 import { getGoalProgress } from "../domain/calc";
 import { newId } from "../domain/genericAssets";
 import { today } from "../domain/format";
-import { canDeleteGoal, isDeletedGoalTransaction } from "../domain/goals";
+import { canDeleteGoal, canEditGoal, isDeletedGoalTransaction } from "../domain/goals";
 import type { Asset, GenericAsset, Goal, Transaction } from "../domain/types";
 import type { Notify } from "./Toasts";
 
@@ -28,11 +28,44 @@ export function GoalsPanel({
   balances,
   targetFireCapital,
   onGoalsChange,
+  onTransactionsChange,
   notify,
-}: Pick<Props, "goals" | "assets" | "genericAssets" | "balances" | "targetFireCapital" | "onGoalsChange" | "notify">) {
+}: Pick<Props, "goals" | "assets" | "genericAssets" | "balances" | "targetFireCapital" | "onGoalsChange" | "onTransactionsChange" | "notify">) {
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("2027-12-31");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editDate, setEditDate] = useState("");
+
+  const startEdit = (goal: Goal) => {
+    if (!canEditGoal(goal)) return;
+    setEditingId(goal.id);
+    setEditName(goal.name);
+    setEditAmount(String(goal.targetAmount));
+    setEditDate(goal.targetDate);
+  };
+
+  const saveEdit = (goal: Goal) => {
+    const targetAmount = Number(editAmount);
+    const newName = editName.trim();
+    if (!newName || !(targetAmount > 0)) {
+      notify("⚠️ Введи назву цілі та цільову суму!", "amber");
+      return;
+    }
+    if (goals.some((g) => g.id !== goal.id && g.name === newName)) {
+      notify("⚠️ Ціль з такою назвою вже існує!", "amber");
+      return;
+    }
+    const targetDate = editDate || "2027-12-31";
+    onGoalsChange((list) => list.map((g) => (g.id === goal.id ? { ...g, name: newName, targetAmount, targetDate } : g)));
+    if (newName !== goal.name) {
+      onTransactionsChange((list) => list.map((t) => (t.goalId === goal.id ? { ...t, goalName: newName } : t)));
+    }
+    notify(`✏️ Ціль "${newName}" оновлено!`, "indigo");
+    setEditingId(null);
+  };
 
   const add = () => {
     const targetAmount = Number(amount);
@@ -83,6 +116,25 @@ export function GoalsPanel({
             const saved = balances[g.id];
             const target = g.builtIn ? targetFireCapital : g.targetAmount;
             const p = getGoalProgress({ ...g, targetAmount: target }, saved ?? 0);
+            if (editingId === g.id) {
+              return (
+                <div key={g.id} className="bg-slate-950/60 border border-indigo-500/60 p-4 rounded-xl flex flex-col gap-2">
+                  <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className={`${field} focus:border-indigo-500`} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="number" step="50" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className={`${field} focus:border-indigo-500`} />
+                    <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className={`${field} focus:border-indigo-500`} />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setEditingId(null)} className="text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5">
+                      Скасувати
+                    </button>
+                    <button type="button" onClick={() => saveEdit(g)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl px-3 py-1.5 text-xs">
+                      Зберегти
+                    </button>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div key={g.id} className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
                 <div>
@@ -92,6 +144,11 @@ export function GoalsPanel({
                       <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
                         {g.builtIn ? "вбудована" : `до ${g.targetDate}`}
                       </span>
+                      {canEditGoal(g) && (
+                        <button type="button" onClick={() => startEdit(g)} title="Редагувати" className="text-slate-500 hover:text-indigo-400 text-xs">
+                          ✎
+                        </button>
+                      )}
                       {!g.builtIn && (
                         <button type="button" onClick={() => remove(g)} className="text-slate-500 hover:text-rose-400 text-xs">
                           ✕

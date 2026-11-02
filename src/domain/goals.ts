@@ -6,6 +6,10 @@ export function createFireGoal(): Goal {
   return { id: FIRE_GOAL_ID, name: "🔥 FIRE", targetAmount: 0, targetDate: "", builtIn: true };
 }
 
+export function canEditGoal(goal: Goal): boolean {
+  return goal.id !== FIRE_GOAL_ID && !goal.builtIn;
+}
+
 export type DeleteGoalCheck = { ok: true } | { ok: false; reason: "builtin" | "linked"; count: number };
 
 export function canDeleteGoal(goalId: string, assets: Asset[], genericAssets: GenericAsset[], goals: Goal[]): DeleteGoalCheck {
