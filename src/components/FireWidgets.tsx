@@ -6,20 +6,21 @@ import { usd } from "../domain/format";
 interface Props {
   rules: FireRules;
   totals: PortfolioTotals;
+  staticCapital: number;
   progress: FireProgress;
 }
 
-export function FireWidgets({ rules, totals, progress }: Props) {
+export function FireWidgets({ rules, totals, staticCapital, progress }: Props) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
       <FireGoalWidget rules={rules} progress={progress} />
       <CrossoverWidget rules={rules} progress={progress} />
-      <TimeBuyerWidget rules={rules} totals={totals} />
+      <TimeBuyerWidget rules={rules} totals={totals} staticCapital={staticCapital} />
     </div>
   );
 }
 
-function FireGoalWidget({ rules, progress }: Omit<Props, "totals">) {
+function FireGoalWidget({ rules, progress }: Pick<Props, "rules" | "progress">) {
   return (
     <div className="lg:col-span-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-lg">
       <div>
@@ -57,7 +58,7 @@ function FireGoalWidget({ rules, progress }: Omit<Props, "totals">) {
   );
 }
 
-function CrossoverWidget({ rules, progress }: Omit<Props, "totals">) {
+function CrossoverWidget({ rules, progress }: Pick<Props, "rules" | "progress">) {
   return (
     <div className="lg:col-span-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-lg">
       <div>
@@ -107,10 +108,10 @@ function CrossoverWidget({ rules, progress }: Omit<Props, "totals">) {
   );
 }
 
-function TimeBuyerWidget({ rules, totals }: Omit<Props, "progress">) {
+function TimeBuyerWidget({ rules, totals, staticCapital }: Pick<Props, "rules" | "totals" | "staticCapital">) {
   const [amountText, setAmountText] = useState("500");
   const simAmount = Math.max(0, Number(amountText) || 0);
-  const t = getTimeBuyer(rules, totals.totalMarketValue, simAmount);
+  const t = getTimeBuyer(rules, totals.totalMarketValue, simAmount, staticCapital);
   const quick =
     "bg-slate-800 hover:bg-slate-700 text-[11px] px-2 py-1.5 rounded-lg font-semibold";
 
@@ -140,7 +141,7 @@ function TimeBuyerWidget({ rules, totals }: Omit<Props, "progress">) {
           <button type="button" onClick={() => setAmountText("1000")} className={`${quick} text-slate-200`}>$1,000</button>
           <button
             type="button"
-            onClick={() => setAmountText(String(Math.round(totals.totalMarketValue)))}
+            onClick={() => setAmountText(String(Math.round(totals.totalMarketValue + staticCapital)))}
             className="bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-[11px] px-2 py-1.5 rounded-lg text-amber-300 font-bold"
             title="Підставити весь поточний портфель"
           >

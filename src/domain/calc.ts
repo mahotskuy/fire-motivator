@@ -1,5 +1,6 @@
-import type { Asset, AppState, Goal, Settings, Snapshot, Transaction } from "./types";
+import type { Asset, Goal, Settings, Snapshot } from "./types";
 import { BILL_LEVELS } from "./defaults";
+import { FIRE_GOAL_ID } from "./goals";
 
 export interface FireRules {
   targetMonthlyPassive: number;
@@ -56,12 +57,13 @@ export function calculateMonthsToTarget(
   targetCapital: number,
   monthlySave: number,
   annualReturn: number,
+  staticCapital = 0,
 ): number {
-  if (currentCapital >= targetCapital) return 0;
+  if (currentCapital + staticCapital >= targetCapital) return 0;
   let balance = currentCapital;
   let months = 0;
   const r = annualReturn / 12;
-  while (balance < targetCapital && months < 1200) {
+  while (balance + staticCapital < targetCapital && months < 1200) {
     balance = balance * (1 + r) + monthlySave;
     months++;
   }
@@ -121,8 +123,15 @@ export interface FireProgress {
   leftToCross: number;
 }
 
-export function getFireProgress(rules: FireRules, totals: PortfolioTotals, now: Date = new Date()): FireProgress {
+// `staticCapital` — кошти без прогнозованої дохідності (генеричні активи): враховуються в цілі, але не дають дивідендів і росту
+export function getFireProgress(
+  rules: FireRules,
+  totals: PortfolioTotals,
+  now: Date = new Date(),
+  staticCapital = 0,
+): FireProgress {
   const { totalMarketValue, totalCostBasis } = totals;
+  const totalCapital = totalMarketValue + staticCapital;
   const totalPnl = totalMarketValue - totalCostBasis;
   const plannedCapital = getPlannedCapitalForToday(rules, now);
   const monthlyDividends = (totalMarketValue * rules.divDecimal) / 12;
@@ -132,25 +141,26 @@ export function getFireProgress(rules: FireRules, totals: PortfolioTotals, now: 
     rules.targetFireCapital,
     rules.mandatoryMonthlySave,
     rules.totalAnnualReturn,
+    staticCapital,
   );
 
   return {
     totalPnl,
     totalPnlPct: totalCostBasis > 0 ? (totalPnl / totalCostBasis) * 100 : 0,
     plannedCapital,
-    deltaToPlan: totalMarketValue - plannedCapital,
+    deltaToPlan: totalCapital - plannedCapital,
     monthlyDividends,
     monthlyTotalGrowth,
-    firePct: Math.min(100, (totalMarketValue / rules.targetFireCapital) * 100),
-    remainingCapital: Math.max(0, rules.targetFireCapital - totalMarketValue),
-    runwayMonths: totalMarketValue / rules.targetMonthlyPassive,
-    runwayDays: Math.round(totalMarketValue / ((rules.targetMonthlyPassive * 12) / 365)),
+    firePct: Math.min(100, (totalCapital / rules.targetFireCapital) * 100),
+    remainingCapital: Math.max(0, rules.targetFireCapital - totalCapital),
+    runwayMonths: totalCapital / rules.targetMonthlyPassive,
+    runwayDays: Math.round(totalCapital / ((rules.targetMonthlyPassive * 12) / 365)),
     monthsLeft,
     yearsLeft: Math.floor(monthsLeft / 12),
     remMonths: monthsLeft % 12,
     retireAge: rules.currentAge + monthsLeft / 12,
     crossoverPct: Math.min(100, (monthlyTotalGrowth / rules.mandatoryMonthlySave) * 100),
-    leftToCross: Math.max(0, rules.crossoverCapital - totalMarketValue),
+    leftToCross: Math.max(0, rules.crossoverCapital - totalCapital),
   };
 }
 
@@ -164,7 +174,7 @@ export interface TimeBuyerResult {
   coveredPct: number;
 }
 
-export function getTimeBuyer(rules: FireRules, totalMarketValue: number, simAmount: number): TimeBuyerResult {
+export function getTimeBuyer(rules: FireRules, totalMarketValue: number, simAmount: number, staticCapital = 0): TimeBuyerResult {
   const annualExpenses = rules.targetMonthlyPassive * 12;
   const costPerDay = annualExpenses / 365;
   const costPerHour = annualExpenses / (365 * 24);
@@ -174,12 +184,14 @@ export function getTimeBuyer(rules: FireRules, totalMarketValue: number, simAmou
     rules.targetFireCapital,
     rules.mandatoryMonthlySave,
     rules.totalAnnualReturn,
+    staticCapital,
   );
   const monthsAfter = calculateMonthsToTarget(
     totalMarketValue + simAmount,
     rules.targetFireCapital,
     rules.mandatoryMonthlySave,
     rules.totalAnnualReturn,
+    staticCapital,
   );
   const coveredDaysTotal = Math.min(365, (totalMarketValue * rules.divDecimal) / costPerDay);
 
@@ -261,10 +273,7 @@ export function compareToSnapshot(
   };
 }
 
-export function getGoalProgress(goal: Goal, transactions: Transaction[], now: Date = new Date()) {
-  const saved = transactions
-    .filter((t) => t.goalName === goal.name)
-    .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+export function getGoalProgress(goal: Goal, saved: number, now: Date = new Date()) {
   const pct = Math.min(100, (saved / (Number(goal.targetAmount) || 1)) * 100);
   const monthsRem = Math.max(
     1,
@@ -274,20 +283,14 @@ export function getGoalProgress(goal: Goal, transactions: Transaction[], now: Da
   return { saved, pct, monthsRem, monthlyNeed: remAmount > 0 ? Math.ceil(remAmount / monthsRem) : 0 };
 }
 
-export function buildSnapshot(state: AppState, date: string, note: string, now: Date = new Date()): Snapshot {
-  const { totalMarketValue, totalCostBasis } = getPortfolioTotals(state.assets);
-  return {
-    id: "snap-" + now.getTime(),
-    date,
-    timestamp: now.toISOString(),
-    totalMarketValue: Number(totalMarketValue.toFixed(2)),
-    totalCostBasis: Number(totalCostBasis.toFixed(2)),
-    positionsSummary: state.assets.map((a) => `${a.ticker} (${a.shares})`).join(", "),
-    note,
-  };
-}
-
-export function buyOrUpdateAsset(assets: Asset[], ticker: string, shares: number, price: number): Asset[] {
+// Існуюча позиція зберігає свою ціль; `goalId` застосовується лише до нових тікерів
+export function buyOrUpdateAsset(
+  assets: Asset[],
+  ticker: string,
+  shares: number,
+  price: number,
+  goalId: string = FIRE_GOAL_ID,
+): Asset[] {
   const existing = assets.find((a) => a.ticker === ticker);
   if (!existing) {
     return [
@@ -297,6 +300,7 @@ export function buyOrUpdateAsset(assets: Asset[], ticker: string, shares: number
         shares: Number(shares.toFixed(4)),
         avgBuyPrice: Number(price.toFixed(2)),
         marketPrice: Number(price.toFixed(2)),
+        goalId,
       },
     ];
   }

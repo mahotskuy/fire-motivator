@@ -6,6 +6,8 @@ import type { SaveStatus } from "../hooks/useFireState";
 interface Props {
   rules: FireRules;
   totals: PortfolioTotals;
+  wealth: number | null;
+  fireAvailable: boolean;
   progress: FireProgress;
   status: SaveStatus;
   storageLabel: string;
@@ -25,13 +27,15 @@ function StatusBadge({ status, label }: { status: SaveStatus; label: string }) {
   return <span className={`${base} bg-slate-800 text-slate-300 border-slate-700`}>💾 {label}{time}</span>;
 }
 
-export function Header({ rules, totals, progress, status, storageLabel, onExport, onImport }: Props) {
+export function Header({ rules, totals, wealth, fireAvailable, progress, status, storageLabel, onExport, onImport }: Props) {
   const onFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) onImport(file);
     e.target.value = "";
   };
   const onTrack = progress.deltaToPlan >= 0;
+  const stockPnl = totals.totalMarketValue - totals.totalCostBasis;
+  const stockPnlPct = totals.totalCostBasis > 0 ? (stockPnl / totals.totalCostBasis) * 100 : 0;
   const btn =
     "flex-1 sm:flex-none justify-center inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl transition";
 
@@ -45,14 +49,18 @@ export function Header({ rules, totals, progress, status, storageLabel, onExport
             </h1>
             <span
               className={`text-xs font-bold px-3 py-1 rounded-full border ${
-                onTrack
-                  ? "bg-emerald-950 text-emerald-400 border-emerald-800"
-                  : "bg-amber-950 text-amber-400 border-amber-800"
+                !fireAvailable
+                  ? "bg-slate-800 text-amber-300 border-amber-800"
+                  : onTrack
+                    ? "bg-emerald-950 text-emerald-400 border-emerald-800"
+                    : "bg-amber-950 text-amber-400 border-amber-800"
               }`}
             >
-              {onTrack
-                ? `🟢 ON TRACK (+$${usd(progress.deltaToPlan)} до плану)`
-                : `🟡 ВІДСТАВАННЯ (-$${usd(Math.abs(progress.deltaToPlan))} від плану)`}
+              {!fireAvailable
+                ? "⚠️ FIRE недоступний (немає курсу)"
+                : onTrack
+                  ? `🟢 ON TRACK (+$${usd(progress.deltaToPlan)} до плану)`
+                  : `🟡 ВІДСТАВАННЯ (-$${usd(Math.abs(progress.deltaToPlan))} від плану)`}
             </span>
             <StatusBadge status={status} label={storageLabel} />
           </div>
@@ -79,15 +87,16 @@ export function Header({ rules, totals, progress, status, storageLabel, onExport
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Kpi label="Вкладено своїх (Cost Basis)" value={`$${usd(totals.totalCostBasis)}`} className="text-slate-200" />
         <Kpi label="Ринкова вартість IBKR" value={`$${usd(totals.totalMarketValue)}`} className="text-emerald-400" />
         <Kpi
           label="Чистий приріст ринку (P&L)"
-          value={`${signed(progress.totalPnl)}$${usd(progress.totalPnl)} (${progress.totalPnlPct.toFixed(1)}%)`}
-          className={progress.totalPnl >= 0 ? "text-emerald-400" : "text-rose-400"}
+          value={`${signed(stockPnl)}$${usd(stockPnl)} (${stockPnlPct.toFixed(1)}%)`}
+          className={stockPnl >= 0 ? "text-emerald-400" : "text-rose-400"}
         />
         <Kpi label="План на сьогодні (On-Track)" value={`$${usd(progress.plannedCapital)}`} className="text-indigo-400" />
+        <Kpi label="Загальні статки (всі активи)" value={wealth === null ? "— (немає курсу)" : `$${usd(wealth)}`} className="text-sky-400" />
       </div>
     </div>
   );

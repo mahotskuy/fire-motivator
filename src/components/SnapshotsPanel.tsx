@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { buildSnapshot, compareToSnapshot, type PortfolioTotals } from "../domain/calc";
+import { compareToSnapshot, type PortfolioTotals } from "../domain/calc";
 import { signed, today, usd } from "../domain/format";
+import { buildSnapshot, isLegacySnapshot } from "../domain/snapshots";
 import type { AppState, Snapshot } from "../domain/types";
 import type { Notify } from "./Toasts";
 
 interface Props {
   state: AppState;
   totals: PortfolioTotals;
+  wealth: number | null;
+  fxFresh: boolean;
   onChange: (fn: (snapshots: Snapshot[]) => Snapshot[]) => void;
   notify: Notify;
 }
@@ -14,7 +17,7 @@ interface Props {
 const inputClass =
   "bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none";
 
-export function SnapshotsPanel({ state, totals, onChange, notify }: Props) {
+export function SnapshotsPanel({ state, totals, wealth, fxFresh, onChange, notify }: Props) {
   const { snapshots } = state;
   const [date, setDate] = useState("");
   const [note, setNote] = useState("");
@@ -22,12 +25,20 @@ export function SnapshotsPanel({ state, totals, onChange, notify }: Props) {
 
   const baseline = snapshots.find((s) => s.id === baselineId) ?? snapshots[snapshots.length - 1];
   const cmp = baseline ? compareToSnapshot(baseline, totals) : null;
+  const wealthDelta =
+    baseline && !isLegacySnapshot(baseline) && wealth !== null ? wealth - (baseline.combinedWealth ?? 0) : null;
 
   const take = () => {
-    const snap = buildSnapshot(state, date || today(), note.trim() || "Місячний знімок капіталу");
+    const res = buildSnapshot(state, date || today(), note.trim() || "Місячний знімок капіталу", new Date(), fxFresh);
+    if (!res.ok) {
+      notify(`⚠️ Немає курсу для ${res.missingCurrencies.join(", ")} — снепшот не збережено. Онови курси!`, "amber");
+      return;
+    }
+    const snap = res.snapshot;
     onChange((list) => [...list, snap].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     setNote("");
-    notify(`📸 Снепшот статків на $${usd(totals.totalMarketValue)} успішно збережено!`);
+    notify(`📸 Снепшот статків на $${usd(snap.combinedWealth ?? snap.totalMarketValue)} успішно збережено!`);
+    if (snap.usedCachedRates) notify("⚠️ Снепшот використовує збережені (не оновлені) курси валют", "amber");
   };
 
   const remove = (id: string) => {
@@ -94,6 +105,15 @@ export function SnapshotsPanel({ state, totals, onChange, notify }: Props) {
           <div className="text-[11px] text-slate-500 mt-1">
             {baseline ? `Знімок від ${baseline.date} (${baseline.note})` : "Зроби перший знімок вище"}
           </div>
+          {baseline && (
+            <div className="text-[11px] mt-1 text-slate-400">
+              {isLegacySnapshot(baseline)
+                ? "Старий знімок: лише акції (без інших активів)"
+                : wealthDelta === null
+                  ? "Зміна загальних статків недоступна (немає курсу)"
+                  : `Загальні статки: ${signed(wealthDelta)}$${usd(wealthDelta)} від знімка`}
+            </div>
+          )}
         </Card>
 
         <Card>
@@ -128,7 +148,8 @@ export function SnapshotsPanel({ state, totals, onChange, notify }: Props) {
           <thead>
             <tr className="border-b border-slate-800 text-[11px] text-slate-400 uppercase">
               <th className="pb-2 pr-2">Дата знімка</th>
-              <th className="pb-2 px-2">Ринкова вартість ($)</th>
+              <th className="pb-2 px-2">Ринкова вартість акцій ($)</th>
+              <th className="pb-2 px-2">Загальні статки ($)</th>
               <th className="pb-2 px-2">Вкладено (Cost Basis)</th>
               <th className="pb-2 px-2">Зміна до попереднього</th>
               <th className="pb-2 px-2">Чистий рух ціни ETF</th>
@@ -139,7 +160,7 @@ export function SnapshotsPanel({ state, totals, onChange, notify }: Props) {
           <tbody className="divide-y divide-slate-800/60">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-4 text-center text-slate-500">
+                <td colSpan={8} className="py-4 text-center text-slate-500">
                   Ще не збережено жодного снепшоту статків
                 </td>
               </tr>
@@ -151,6 +172,18 @@ export function SnapshotsPanel({ state, totals, onChange, notify }: Props) {
                 <tr key={s.id} className="hover:bg-slate-800/30 transition">
                   <td className="py-2.5 pr-2 font-bold text-white">{s.date}</td>
                   <td className="py-2.5 px-2 font-extrabold text-emerald-400">${usd(s.totalMarketValue)}</td>
+                  <td className="py-2.5 px-2 text-sky-300 font-bold">
+                    {isLegacySnapshot(s) ? (
+                      <span className="text-[10px] text-slate-500 font-normal">legacy (лише акції)</span>
+                    ) : (
+                      <>
+                        ${usd(s.combinedWealth ?? 0)}
+                        {s.usedCachedRates && (
+                          <span className="ml-1 text-[10px] text-amber-400 font-normal" title="Використано збережені курси">⚠️ кеш курсів</span>
+                        )}
+                      </>
+                    )}
+                  </td>
                   <td className="py-2.5 px-2 text-slate-300">${usd(s.totalCostBasis || 0)}</td>
                   <td className={`py-2.5 px-2 ${prev ? (d >= 0 ? "text-emerald-400 font-bold" : "text-rose-400 font-bold") : "text-slate-400"}`}>
                     {prev ? `${signed(d)}$${usd(d)}` : "База"}

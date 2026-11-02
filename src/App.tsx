@@ -1,18 +1,22 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { AssetsPanel } from "./components/AssetsPanel";
 import { BillsPanel, FireWidgets } from "./components/FireWidgets";
+import { GenericAssetsPanel } from "./components/GenericAssetsPanel";
 import { GoalsPanel, TransactionsPanel } from "./components/GoalsPanel";
 import { Header } from "./components/Header";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SnapshotsPanel } from "./components/SnapshotsPanel";
 import { ToastContainer, useToasts } from "./components/Toasts";
-import { getFireProgress, getFireRules, getPortfolioTotals } from "./domain/calc";
+import { getFireProgress, getFireRules } from "./domain/calc";
+import type { FxCache } from "./domain/currency";
 import { normalizeState } from "./domain/defaults";
 import type { AppState } from "./domain/types";
+import { computeWealth, getGoalBalance } from "./domain/wealth";
 import { SignInScreen } from "./components/SignInScreen";
 import { db, isFirebaseConfigured } from "./firebase/client";
 import { useAuth } from "./hooks/useAuth";
 import { useFireState } from "./hooks/useFireState";
+import { useFxRates } from "./hooks/useFxRates";
 import type { StateStorage } from "./storage/StateStorage";
 import { createFirestoreStorage } from "./storage/firestoreStorage";
 import { localStorageStorage } from "./storage/localStorageStorage";
@@ -48,10 +52,20 @@ interface Account {
 function Dashboard({ storage, account }: { storage: StateStorage; account?: Account }) {
   const { state, update, loaded, loadError, status } = useFireState(storage);
   const { toasts, notify } = useToasts();
+  const setFx = useCallback((fx: FxCache) => update((s) => ({ ...s, fx })), [update]);
+  const { status: fxStatus, refresh: refreshFx } = useFxRates(loaded, setFx);
 
   const rules = useMemo(() => getFireRules(state.settings), [state.settings]);
-  const totals = useMemo(() => getPortfolioTotals(state.assets), [state.assets]);
-  const progress = useMemo(() => getFireProgress(rules, totals), [rules, totals]);
+  const wealth = useMemo(() => computeWealth(state), [state.assets, state.genericAssets, state.fx]);
+  const fireAvailable = wealth.fireGenericValue !== null;
+  const progress = useMemo(
+    () => getFireProgress(rules, wealth.fireStocks, new Date(), wealth.fireGenericValue ?? 0),
+    [rules, wealth],
+  );
+  const balances = useMemo(
+    () => Object.fromEntries(state.goals.map((g) => [g.id, getGoalBalance(g.id, state)])),
+    [state.goals, state.assets, state.genericAssets, state.fx],
+  );
 
   if (loadError) {
     return (
@@ -113,7 +127,9 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
         )}
         <Header
           rules={rules}
-          totals={totals}
+          totals={wealth.stocks}
+          wealth={wealth.combinedWealth}
+          fireAvailable={fireAvailable}
           progress={progress}
           status={status}
           storageLabel={storage.label}
@@ -123,28 +139,59 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
 
         <SettingsPanel
           settings={state.settings}
-          retirementSummary={`🎯 Вихід на пенсію у ${progress.retireAge.toFixed(1)} років (через ${progress.yearsLeft} р. ${progress.remMonths} м.)`}
+          retirementSummary={
+            fireAvailable
+              ? `🎯 Вихід на пенсію у ${progress.retireAge.toFixed(1)} років (через ${progress.yearsLeft} р. ${progress.remMonths} м.)`
+              : "🎯 Прогноз FIRE недоступний: немає курсу для активів, прив'язаних до FIRE"
+          }
           onChange={(settings) => update((s) => ({ ...s, settings }))}
         />
 
-        <FireWidgets rules={rules} totals={totals} progress={progress} />
+        {fireAvailable ? (
+          <FireWidgets rules={rules} totals={wealth.fireStocks} staticCapital={wealth.fireGenericValue ?? 0} progress={progress} />
+        ) : (
+          <div className="bg-amber-950/30 border border-amber-800/60 text-amber-300 text-sm rounded-2xl p-5">
+            ⚠️ Показники FIRE недоступні: немає курсу для {wealth.missingCurrencies.join(", ")}. Онови курси в блоці «Інші активи».
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <BillsPanel rules={rules} monthlyDividends={progress.monthlyDividends} />
           <AssetsPanel
             assets={state.assets}
+            goals={state.goals}
             monthlySave={rules.mandatoryMonthlySave}
             onChange={(fn) => patch("assets", fn)}
             notify={notify}
           />
         </div>
 
-        <SnapshotsPanel state={state} totals={totals} onChange={(fn) => patch("snapshots", fn)} notify={notify} />
+        <GenericAssetsPanel
+          genericAssets={state.genericAssets}
+          goals={state.goals}
+          fx={state.fx}
+          fxStatus={fxStatus}
+          onRefreshFx={() => void refreshFx()}
+          onChange={(fn) => patch("genericAssets", fn)}
+          notify={notify}
+        />
+
+        <SnapshotsPanel
+          state={state}
+          totals={wealth.stocks}
+          wealth={wealth.combinedWealth}
+          fxFresh={fxStatus.fresh}
+          onChange={(fn) => patch("snapshots", fn)}
+          notify={notify}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <GoalsPanel
             goals={state.goals}
-            transactions={state.transactions}
+            assets={state.assets}
+            genericAssets={state.genericAssets}
+            balances={balances}
+            targetFireCapital={rules.targetFireCapital}
             onGoalsChange={(fn) => patch("goals", fn)}
             notify={notify}
           />

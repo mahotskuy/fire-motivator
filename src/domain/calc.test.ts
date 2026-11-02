@@ -43,7 +43,7 @@ describe("calculateMonthsToTarget", () => {
 
 describe("getPortfolioTotals", () => {
   it("presetAssets_SumsMarketValueAndCostBasis", () => {
-    const totals = getPortfolioTotals([{ ticker: "A", shares: 2, avgBuyPrice: 10, marketPrice: 15 }]);
+    const totals = getPortfolioTotals([{ ticker: "A", shares: 2, avgBuyPrice: 10, marketPrice: 15, goalId: "fire" }]);
     expect(totals).toEqual({ totalMarketValue: 30, totalCostBasis: 20 });
   });
 });
@@ -116,16 +116,26 @@ describe("compareToSnapshot", () => {
 
 describe("buyOrUpdateAsset", () => {
   it("existingTicker_AveragesCostAndSumsShares", () => {
-    const assets = [{ ticker: "VOO", shares: 1, avgBuyPrice: 100, marketPrice: 100 }];
+    const assets = [{ ticker: "VOO", shares: 1, avgBuyPrice: 100, marketPrice: 100, goalId: "fire" }];
     const [updated] = buyOrUpdateAsset(assets, "VOO", 1, 200);
     expect(updated.shares).toBe(2);
     expect(updated.avgBuyPrice).toBe(150);
     expect(updated.marketPrice).toBe(200);
   });
 
+  it("buyOrUpdateAsset_ExistingTickerWithOtherGoalArgument_KeepsOriginalGoal", () => {
+    const assets = [{ ticker: "VOO", shares: 1, avgBuyPrice: 100, marketPrice: 100, goalId: "g-v" }];
+    const [updated] = buyOrUpdateAsset(assets, "VOO", 1, 200, "fire");
+    expect(updated.goalId).toBe("g-v");
+  });
+
   it("newTicker_AppendsPosition", () => {
     expect(buyOrUpdateAsset([], "SCHD", 2, 89.2)).toEqual([
-      { ticker: "SCHD", shares: 2, avgBuyPrice: 89.2, marketPrice: 89.2 },
+      { ticker: "SCHD", shares: 2, avgBuyPrice: 89.2, marketPrice: 89.2, goalId: "fire" },
     ]);
+  });
+
+  it("buyOrUpdateAsset_NewTickerWithGoal_AssignsThatGoal", () => {
+    expect(buyOrUpdateAsset([], "SCHD", 1, 10, "g-v")[0].goalId).toBe("g-v");
   });
 });

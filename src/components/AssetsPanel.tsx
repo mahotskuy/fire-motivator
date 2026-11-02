@@ -1,12 +1,14 @@
 import { useRef, useState } from "react";
 import { buyOrUpdateAsset } from "../domain/calc";
-import type { Asset } from "../domain/types";
+import { FIRE_GOAL_ID } from "../domain/goals";
+import type { Asset, Goal } from "../domain/types";
 import { ETF_CATALOG, QUICK_PICKS_IBKR, QUICK_PICKS_OTHER, findCatalogItem } from "../services/catalog";
 import { fetchTickerPrice, getKnownPrice, getLiveQuote } from "../services/quotes";
 import type { Notify } from "./Toasts";
 
 interface Props {
   assets: Asset[];
+  goals: Goal[];
   monthlySave: number;
   onChange: (fn: (assets: Asset[]) => Asset[]) => void;
   notify: Notify;
@@ -17,7 +19,7 @@ const cellClass =
 const field =
   "w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs focus:outline-none";
 
-export function AssetsPanel({ assets, monthlySave, onChange, notify }: Props) {
+export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Props) {
   const [refreshing, setRefreshing] = useState(false);
 
   const refreshAll = async () => {
@@ -41,6 +43,12 @@ export function AssetsPanel({ assets, monthlySave, onChange, notify }: Props) {
     if (!current || current[key] === num) return;
     onChange((list) => list.map((a) => (a.ticker === ticker ? { ...a, [key]: num } : a)));
     notify(`☁️ Збережено ${ticker} (${key}: ${num})`);
+  };
+
+  const editGoal = (ticker: string, goalId: string) => {
+    if (!goals.some((g) => g.id === goalId)) return;
+    onChange((list) => list.map((a) => (a.ticker === ticker ? { ...a, goalId } : a)));
+    notify(`🎯 ${ticker}: ціль змінено`, "indigo");
   };
 
   const remove = (ticker: string) => {
@@ -80,6 +88,7 @@ export function AssetsPanel({ assets, monthlySave, onChange, notify }: Props) {
                 <th className="pb-2.5 px-2">Позиція (Shares)</th>
                 <th className="pb-2.5 px-2">Сер. купівля ($)</th>
                 <th className="pb-2.5 px-2">Last Price ($)</th>
+                <th className="pb-2.5 px-2">Ціль</th>
                 <th className="pb-2.5 px-2 text-right">Вартість</th>
                 <th className="pb-2.5 pl-2 text-right">P&L</th>
                 <th className="pb-2.5 pl-2 text-right" />
@@ -111,6 +120,15 @@ export function AssetsPanel({ assets, monthlySave, onChange, notify }: Props) {
                     <td className="py-2.5 px-2">
                       <NumberCell value={asset.marketPrice} onCommit={(v) => editField(asset.ticker, "marketPrice", v)} className="w-24 text-emerald-400 font-bold" />
                     </td>
+                    <td className="py-2.5 px-2">
+                      <select value={asset.goalId} onChange={(e) => editGoal(asset.ticker, e.target.value)} className={`${cellClass} max-w-[150px] text-slate-200`}>
+                        {goals.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="py-2.5 px-2 text-right font-bold text-white">
                       ${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
@@ -130,7 +148,7 @@ export function AssetsPanel({ assets, monthlySave, onChange, notify }: Props) {
         </div>
       </div>
 
-      <AddAssetForm assets={assets} monthlySave={monthlySave} onChange={onChange} notify={notify} />
+      <AddAssetForm assets={assets} goals={goals} monthlySave={monthlySave} onChange={onChange} notify={notify} />
     </div>
   );
 }
@@ -149,8 +167,9 @@ function NumberCell({ value, onCommit, className }: { value: number; onCommit: (
   );
 }
 
-function AddAssetForm({ assets, monthlySave, onChange, notify }: Props) {
+function AddAssetForm({ assets, goals, monthlySave, onChange, notify }: Props) {
   const [ticker, setTicker] = useState("");
+  const [goalId, setGoalId] = useState(FIRE_GOAL_ID);
   const [shares, setShares] = useState("");
   const [price, setPrice] = useState("");
   const [status, setStatus] = useState("Готово до вводу");
@@ -245,7 +264,8 @@ function AddAssetForm({ assets, monthlySave, onChange, notify }: Props) {
     const qty = Number(shares) > 0 ? Number(shares) : 1;
     const unit = Number(price) > 0 ? Number(price) : (getKnownPrice(query) ?? 100);
 
-    onChange((list) => buyOrUpdateAsset(list, query, qty, unit));
+    const selectedGoal = goals.some((g) => g.id === goalId) ? goalId : FIRE_GOAL_ID;
+    onChange((list) => buyOrUpdateAsset(list, query, qty, unit, selectedGoal));
     changeTicker("");
     setShares("");
     setPrice("");
@@ -325,6 +345,17 @@ function AddAssetForm({ assets, monthlySave, onChange, notify }: Props) {
           >
             ${monthlySave}
           </button>
+        </div>
+
+        <div className="sm:col-span-12 flex items-center gap-2 text-[11px] text-slate-400">
+          <span>🎯 Ціль нової позиції (для вже наявного тікера ціль зберігається):</span>
+          <select value={goals.some((g) => g.id === goalId) ? goalId : FIRE_GOAL_ID} onChange={(e) => setGoalId(e.target.value)} className={`${cellClass} text-slate-200`}>
+            {goals.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="sm:col-span-2">

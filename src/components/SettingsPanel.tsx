@@ -12,7 +12,7 @@ type NumericKey = Exclude<keyof Settings, "planStartDate">;
 
 const FIELDS: { key: NumericKey; label: string; step: number; min: number; max?: number; color: string }[] = [
   { key: "targetMonthlyPassive", label: "Бажаний дохід ($/міс)", step: 50, min: 100, color: "text-white" },
-  { key: "mandatoryMonthlySave", label: "Внесок із ЗП ($/міс)", step: 50, min: 50, color: "text-emerald-400" },
+  { key: "mandatoryMonthlySave", label: "FIRE-внесок із ЗП ($/міс)", step: 50, min: 50, color: "text-emerald-400" },
   { key: "expectedGrowthRate", label: "Ріст акцій (% річних)", step: 0.5, min: 0, max: 30, color: "text-sky-400" },
   { key: "expectedDividendYield", label: "Дивіденди / SWR (%)", step: 0.2, min: 1, max: 15, color: "text-amber-400" },
   { key: "currentAge", label: "Твій поточний вік", step: 1, min: 16, max: 90, color: "text-white" },
