@@ -211,31 +211,31 @@ export interface BillCoverage {
   name: string;
   icon: string;
   billCost: number;
-  covered: number;
+  neededCapital: number;
+  investedCapital: number;
   pct: number;
   unlocked: boolean;
-  boostPct: number;
 }
 
-export function getBillCoverage(rules: FireRules, monthlyDividends: number) {
+export function getBillCoverage(rules: FireRules, investedCapital: number) {
   const scaleFactor = rules.targetMonthlyPassive / 1000;
-  const divPerMonthlySave = (rules.mandatoryMonthlySave * rules.divDecimal) / 12;
-  let remaining = monthlyDividends;
+  let remaining = investedCapital;
 
   const levels: BillCoverage[] = BILL_LEVELS.map((bill) => {
     const billCost = Math.round(bill.baseCost * scaleFactor);
-    const covered = Math.min(billCost, Math.max(0, remaining));
-    remaining -= covered;
-    const pct = billCost > 0 ? (covered / billCost) * 100 : 100;
+    const neededCapital = rules.divDecimal > 0 ? Math.round((billCost * 12) / rules.divDecimal) : Infinity;
+    const invested = Math.min(neededCapital, Math.max(0, remaining));
+    remaining -= invested;
+    const pct = neededCapital > 0 ? (invested / neededCapital) * 100 : 100;
     return {
       id: bill.id,
       name: bill.name,
       icon: bill.icon,
       billCost,
-      covered,
+      neededCapital,
+      investedCapital: invested,
       pct,
       unlocked: pct >= 99.9,
-      boostPct: billCost > 0 ? (divPerMonthlySave / billCost) * 100 : 0,
     };
   });
 

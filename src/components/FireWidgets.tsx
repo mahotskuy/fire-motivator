@@ -186,8 +186,10 @@ function Row({ label, valueClass, children }: { label: string; valueClass: strin
   );
 }
 
-export function BillsPanel({ rules, monthlyDividends }: { rules: FireRules; monthlyDividends: number }) {
-  const { levels, unlockedCount } = getBillCoverage(rules, monthlyDividends);
+const formatUsd = (value: number) => (Number.isFinite(value) ? `$${Math.round(value).toLocaleString("uk-UA")}` : "∞");
+
+export function BillsPanel({ rules, investedCapital }: { rules: FireRules; investedCapital: number }) {
+  const { levels, unlockedCount } = getBillCoverage(rules, investedCapital);
 
   return (
     <div className="lg:col-span-5 bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between shadow-lg">
@@ -214,7 +216,7 @@ export function BillsPanel({ rules, monthlyDividends }: { rules: FireRules; mont
                   {b.icon} {b.name}
                 </span>
                 <span className={`font-bold ${b.unlocked ? "text-emerald-400" : "text-slate-400"}`}>
-                  ${b.covered.toFixed(1)} / ${b.billCost} міс {b.unlocked ? "✅" : `(${b.pct.toFixed(0)}%)`}
+                  {b.unlocked ? "✅" : `${b.pct.toFixed(0)}%`} · ${b.billCost}/міс дивідендів
                 </span>
               </div>
               <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
@@ -223,11 +225,9 @@ export function BillsPanel({ rules, monthlyDividends }: { rules: FireRules; mont
                   style={{ width: `${b.pct}%` }}
                 />
               </div>
-              {!b.unlocked && (
-                <p className="text-[10px] text-amber-300/80 mt-1.5">
-                  ⚡ Внесок ${rules.mandatoryMonthlySave} додасть <b>+{b.boostPct.toFixed(1)}%</b> до цього рівня
-                </p>
-              )}
+              <p className="text-[10px] text-slate-400 mt-1.5 text-right">
+                {formatUsd(Math.floor(b.investedCapital))} із {formatUsd(b.neededCapital)}
+              </p>
             </div>
           ))}
         </div>

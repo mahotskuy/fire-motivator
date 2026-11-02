@@ -156,7 +156,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <BillsPanel rules={rules} monthlyDividends={progress.monthlyDividends} />
+          <BillsPanel rules={rules} investedCapital={wealth.fireStocks.totalMarketValue} />
           <AssetsPanel
             assets={state.assets}
             goals={state.goals}

@@ -67,10 +67,24 @@ describe("formatDaysAndHours", () => {
 });
 
 describe("getBillCoverage", () => {
-  it("dividendsCoverFirstTwoBills_UnlocksTwoLevels", () => {
-    const { levels, unlockedCount } = getBillCoverage(rules, 100);
+  it("capitalCoversFirstTwoBills_UnlocksTwoLevels", () => {
+    const [first, second] = getBillCoverage(rules, 0).levels;
+    const { levels, unlockedCount } = getBillCoverage(rules, first.neededCapital + second.neededCapital);
     expect(unlockedCount).toBe(2);
-    expect(levels[2].covered).toBeCloseTo(0, 5);
+    expect(levels[2].investedCapital).toBeCloseTo(0, 5);
+  });
+
+  it("partialCapital_FillsLevelsInOrder", () => {
+    const first = getBillCoverage(rules, 0).levels[0];
+    const { levels } = getBillCoverage(rules, first.neededCapital / 2);
+    expect(levels[0].investedCapital).toBeCloseTo(first.neededCapital / 2, 5);
+    expect(levels[0].pct).toBeCloseTo(50, 5);
+    expect(levels[0].unlocked).toBe(false);
+  });
+
+  it("neededCapital_IsBillCostTimesTwelveOverDividendYield", () => {
+    const level = getBillCoverage(rules, 0).levels[0];
+    expect(level.neededCapital).toBe(Math.round((level.billCost * 12) / rules.divDecimal));
   });
 
   it("higherTargetIncome_ScalesBillCosts", () => {
