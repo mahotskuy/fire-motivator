@@ -252,14 +252,19 @@ export function getBillCoverage(
   return { levels, unlockedCount: levels.filter((l) => l.unlocked).length };
 }
 
+// Переносить рівень на позицію toIndex; якщо позиція та сама або поза межами, порядок не змінюється
+export function moveBillLevelTo(order: number[], id: number, toIndex: number): number[] {
+  const index = order.indexOf(id);
+  if (index === -1 || toIndex === index || toIndex < 0 || toIndex >= order.length) return order;
+  const next = [...order];
+  next.splice(index, 1);
+  next.splice(toIndex, 0, id);
+  return next;
+}
+
 // Пересуває рівень на одну позицію вгору (-1) або вниз (+1); на краю порядок не змінюється
 export function moveBillLevel(order: number[], id: number, direction: -1 | 1): number[] {
-  const index = order.indexOf(id);
-  const target = index + direction;
-  if (index === -1 || target < 0 || target >= order.length) return order;
-  const next = [...order];
-  [next[index], next[target]] = [next[target], next[index]];
-  return next;
+  return moveBillLevelTo(order, id, order.indexOf(id) + direction);
 }
 
 export interface SnapshotComparison {

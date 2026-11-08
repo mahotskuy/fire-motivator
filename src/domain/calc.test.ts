@@ -11,6 +11,7 @@ import {
   getPortfolioTotals,
   getTimeBuyer,
   moveBillLevel,
+  moveBillLevelTo,
 } from "./calc";
 
 const rules = getFireRules(createDefaultState().settings);
@@ -115,6 +116,19 @@ describe("billLevelOrder", () => {
     expect(moveBillLevel(order, 1, -1)).toBe(order);
     expect(moveBillLevel(order, 3, 1)).toBe(order);
     expect(moveBillLevel(order, 9, 1)).toBe(order);
+  });
+
+  it("moveBillLevelTo_MovesToPositionAndShiftsOthers", () => {
+    expect(moveBillLevelTo([1, 2, 3, 4], 4, 0)).toEqual([4, 1, 2, 3]);
+    expect(moveBillLevelTo([1, 2, 3, 4], 1, 2)).toEqual([2, 3, 1, 4]);
+  });
+
+  it("moveBillLevelTo_SamePositionOrOutOfRange_ReturnsSameOrder", () => {
+    const order = [1, 2, 3];
+    expect(moveBillLevelTo(order, 2, 1)).toBe(order);
+    expect(moveBillLevelTo(order, 2, -1)).toBe(order);
+    expect(moveBillLevelTo(order, 2, 3)).toBe(order);
+    expect(moveBillLevelTo(order, 9, 0)).toBe(order);
   });
 
   it("moveBillLevel_DoesNotMutateInput", () => {

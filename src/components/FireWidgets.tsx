@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { FireProgress, FireRules, PortfolioTotals } from "../domain/calc";
 import { formatDaysAndHours, getBillCoverage, getTimeBuyer } from "../domain/calc";
 import { usd } from "../domain/format";
+import { useDragReorder } from "./dragReorder";
 
 interface Props {
   rules: FireRules;
@@ -197,9 +198,18 @@ export function BillsPanel({
   rules: FireRules;
   investedCapital: number;
   order: number[];
-  onMove: (id: number, direction: -1 | 1) => void;
+  onMove: (id: number, toIndex: number) => void;
 }) {
   const { levels, unlockedCount } = getBillCoverage(rules, investedCapital, order);
+  const { rowRef, handleProps, rowStyle, draggingIndex } = useDragReorder(levels.length, (from, to) =>
+    onMove(levels[from].id, to),
+  );
+
+  const onHandleKeyDown = (e: React.KeyboardEvent, id: number, index: number) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    onMove(id, index + (e.key === "ArrowUp" ? -1 : 1));
+  };
 
   return (
     <div className="lg:col-span-5 bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between shadow-lg">
@@ -210,6 +220,7 @@ export function BillsPanel({
               <span>🔓</span> Рівні покриття рахунків
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">Бізнес-логіка: як твої дивіденди закривають щомісячні витрати</p>
+            <p className="text-xs text-slate-500 mt-0.5">Перетягуй рівні за ручку зліва: спочатку заповнюється верхній</p>
           </div>
           <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-3 py-1 rounded-full font-bold shrink-0">
             {unlockedCount} / {levels.length} відкрито
@@ -219,47 +230,49 @@ export function BillsPanel({
           {levels.map((b, index) => (
             <div
               key={b.id}
-              className={`p-3 rounded-xl border ${b.unlocked ? "bg-emerald-950/20 border-emerald-800/60" : "bg-slate-950/50 border-slate-800"}`}
+              ref={rowRef(index)}
+              style={rowStyle(index)}
+              className={`p-3 rounded-xl border flex items-stretch gap-2 select-none ${
+                draggingIndex === index ? "shadow-xl shadow-black/50 ring-1 ring-amber-400/60 " : ""
+              }${b.unlocked ? "bg-emerald-950/20 border-emerald-800/60" : "bg-slate-950/50 border-slate-800"}`}
             >
-              <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="flex flex-col shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => onMove(b.id, -1)}
-                      disabled={index === 0}
-                      aria-label={`Підняти рівень «${b.name}» вище`}
-                      className="leading-none px-1 text-slate-400 hover:text-white disabled:opacity-25 disabled:hover:text-slate-400"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onMove(b.id, 1)}
-                      disabled={index === levels.length - 1}
-                      aria-label={`Опустити рівень «${b.name}» нижче`}
-                      className="leading-none px-1 text-slate-400 hover:text-white disabled:opacity-25 disabled:hover:text-slate-400"
-                    >
-                      ↓
-                    </button>
-                  </div>
-                  <span className={`font-semibold truncate ${b.unlocked ? "text-emerald-300" : "text-slate-200"}`}>
+              <button
+                type="button"
+                {...handleProps(index)}
+                onKeyDown={(e) => onHandleKeyDown(e, b.id, index)}
+                aria-label={`Змінити порядок рівня «${b.name}»: перетягни або натисни стрілки вгору/вниз`}
+                className={`self-center shrink-0 w-10 h-12 -ml-1 flex items-center justify-center rounded-lg touch-none hover:bg-slate-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${
+                  draggingIndex === index ? "cursor-grabbing text-amber-400" : "cursor-grab text-slate-400"
+                }`}
+              >
+                <svg width="18" height="24" viewBox="0 0 18 24" fill="currentColor" aria-hidden="true">
+                  {[5, 12, 19].map((y) => (
+                    <g key={y}>
+                      <circle cx="5" cy={y} r="2" />
+                      <circle cx="13" cy={y} r="2" />
+                    </g>
+                  ))}
+                </svg>
+              </button>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
+                  <span className={`font-semibold min-w-0 ${b.unlocked ? "text-emerald-300" : "text-slate-200"}`}>
                     {b.icon} {b.name}
                   </span>
+                  <span className={`font-bold text-right ${b.unlocked ? "text-emerald-400" : "text-slate-400"}`}>
+                    {b.unlocked ? "✅" : `${b.pct.toFixed(0)}%`} · ${b.billCost}/міс дивідендів
+                  </span>
                 </div>
-                <span className={`font-bold ${b.unlocked ? "text-emerald-400" : "text-slate-400"}`}>
-                  {b.unlocked ? "✅" : `${b.pct.toFixed(0)}%`} · ${b.billCost}/міс дивідендів
-                </span>
+                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div
+                    className={`${b.unlocked ? "bg-emerald-500" : "bg-amber-400"} h-full transition-all duration-500`}
+                    style={{ width: `${b.pct}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5 text-right">
+                  {formatUsd(Math.floor(b.investedCapital))} із {formatUsd(b.neededCapital)}
+                </p>
               </div>
-              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                <div
-                  className={`${b.unlocked ? "bg-emerald-500" : "bg-amber-400"} h-full transition-all duration-500`}
-                  style={{ width: `${b.pct}%` }}
-                />
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1.5 text-right">
-                {formatUsd(Math.floor(b.investedCapital))} із {formatUsd(b.neededCapital)}
-              </p>
             </div>
           ))}
         </div>
