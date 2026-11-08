@@ -27,16 +27,24 @@ export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Pr
     setRefreshing(true);
     notify("🌐 Оновлюю ринкові котирування всіх ETF...", "indigo");
     const prices = new Map<string, number>();
+    const failed: string[] = [];
     for (const a of assets) {
-      const res = await fetchTickerPrice(a.ticker, a.marketPrice);
+      const res = await fetchTickerPrice(a.ticker);
       if (res && res.price > 0) prices.set(a.ticker, res.price);
+      else failed.push(a.ticker);
     }
-    onChange((list) => list.map((a) => (prices.has(a.ticker) ? { ...a, marketPrice: prices.get(a.ticker)! } : a)));
+    if (prices.size) {
+      onChange((list) => list.map((a) => (prices.has(a.ticker) ? { ...a, marketPrice: prices.get(a.ticker)! } : a)));
+    }
     setRefreshing(false);
-    notify("✅ Ціни ETF оновлено та збережено!");
+    if (failed.length) {
+      notify(`⚠️ Не вдалося оновити: ${failed.join(", ")}. Збережені ціни не змінено.`, "amber");
+    } else {
+      notify("✅ Ціни ETF оновлено та збережено!");
+    }
   };
 
-  const editField = (ticker: string, key: "shares" | "avgBuyPrice" | "marketPrice", raw: string) => {
+  const editField = (ticker: string, key: "shares" | "marketPrice", raw: string) => {
     const num = Number(raw);
     if (raw === "" || Number.isNaN(num) || num < 0) return;
     const current = assets.find((a) => a.ticker === ticker);
@@ -86,11 +94,9 @@ export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Pr
               <tr className="border-b border-slate-800 text-[11px] text-slate-400 uppercase">
                 <th className="pb-2.5 pr-2">Інструмент</th>
                 <th className="pb-2.5 px-2">Позиція (Shares)</th>
-                <th className="pb-2.5 px-2">Сер. купівля ($)</th>
-                <th className="pb-2.5 px-2">Last Price ($)</th>
+                <th className="pb-2.5 px-2">Поточна ціна акції ($)</th>
                 <th className="pb-2.5 px-2">Ціль</th>
-                <th className="pb-2.5 px-2 text-right">Вартість</th>
-                <th className="pb-2.5 pl-2 text-right">P&L</th>
+                <th className="pb-2.5 px-2 text-right">Вартість позиції ($)</th>
                 <th className="pb-2.5 pl-2 text-right" />
               </tr>
             </thead>
@@ -98,9 +104,6 @@ export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Pr
               {assets.map((asset) => {
                 const shares = Number(asset.shares) || 0;
                 const val = shares * (Number(asset.marketPrice) || 0);
-                const cost = shares * (Number(asset.avgBuyPrice) || 0);
-                const pnl = val - cost;
-                const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
                 return (
                   <tr key={asset.ticker} className="hover:bg-slate-800/30 transition">
                     <td className="py-2.5 pr-2">
@@ -113,9 +116,6 @@ export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Pr
                     </td>
                     <td className="py-2.5 px-2">
                       <NumberCell value={asset.shares} onCommit={(v) => editField(asset.ticker, "shares", v)} className="w-20 text-white font-semibold" />
-                    </td>
-                    <td className="py-2.5 px-2">
-                      <NumberCell value={asset.avgBuyPrice} onCommit={(v) => editField(asset.ticker, "avgBuyPrice", v)} className="w-20 text-slate-300" />
                     </td>
                     <td className="py-2.5 px-2">
                       <NumberCell value={asset.marketPrice} onCommit={(v) => editField(asset.ticker, "marketPrice", v)} className="w-24 text-emerald-400 font-bold" />
@@ -131,9 +131,6 @@ export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Pr
                     </td>
                     <td className="py-2.5 px-2 text-right font-bold text-white">
                       ${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className={`py-2.5 pl-2 text-right text-xs font-semibold ${pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                      {pnl >= 0 ? "+" : ""}${pnl.toFixed(0)} ({pnlPct.toFixed(1)}%)
                     </td>
                     <td className="py-2.5 pl-2 text-right">
                       <button type="button" onClick={() => remove(asset.ticker)} className="text-slate-500 hover:text-rose-400 text-xs px-1.5 py-0.5 rounded" title="Видалити з портфеля">
@@ -182,6 +179,7 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify }: Props) {
   const query = ticker.trim().toUpperCase();
 
   const changeTicker = (value: string) => {
+    if (tickerRef.current.trim().toUpperCase() !== value.trim().toUpperCase()) setPrice("");
     tickerRef.current = value;
     setTicker(value);
   };
@@ -194,16 +192,21 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify }: Props) {
     }
     if (!shares || Number(shares) <= 0) setShares("1");
 
-    const known = getKnownPrice(clean);
-    if (known && (force || !price)) setPrice(String(known));
+    if (!force) {
+      const known = getKnownPrice(clean) ?? assets.find((a) => a.ticker === clean)?.marketPrice;
+      if (known) setPrice(String(known));
+    }
     setStatus(`⏳ Запитую актуальну ціну ${clean} з біржі...`);
 
     if (force) {
-      const res = await fetchTickerPrice(clean, assets.find((a) => a.ticker === clean)?.marketPrice);
+      const res = await fetchTickerPrice(clean);
+      if (tickerRef.current.trim().toUpperCase() !== clean) return;
       if (res && res.price > 0) {
         setPrice(String(res.price));
         setStatus(`🟢 ${clean}: $${res.price} (${res.source})`);
         bump((n) => n + 1);
+      } else {
+        setStatus(`⚠️ ${clean}: ціну не отримано. Перевір або введи її вручну.`);
       }
     }
   };
@@ -211,6 +214,8 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify }: Props) {
   const select = (value: string) => {
     const clean = value.trim().toUpperCase();
     changeTicker(clean);
+    const known = getKnownPrice(clean) ?? assets.find((a) => a.ticker === clean)?.marketPrice;
+    if (known) setPrice(String(known));
     setOpen(false);
     void applySelection(clean, true);
   };
@@ -225,11 +230,16 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify }: Props) {
     if (clean.length < 2) return;
     debounce.current = setTimeout(async () => {
       const res = await fetchTickerPrice(clean);
-      if (!res || res.price <= 0) return;
+      if (!res || res.price <= 0) {
+        if (tickerRef.current.trim().toUpperCase() === clean) {
+          setStatus(`⚠️ ${clean}: ціну не отримано. Перевір або введи її вручну.`);
+        }
+        return;
+      }
       bump((n) => n + 1);
       if (tickerRef.current.trim().toUpperCase() === clean) {
         setPrice(String(res.price));
-        setStatus(`🟢 Live ${clean}: $${res.price} (${res.source})`);
+        setStatus(`🟢 ${clean}: $${res.price} (${res.source})`);
       }
     }, 350);
   };
@@ -262,7 +272,11 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify }: Props) {
       return;
     }
     const qty = Number(shares) > 0 ? Number(shares) : 1;
-    const unit = Number(price) > 0 ? Number(price) : (getKnownPrice(query) ?? 100);
+    const unit = Number(price);
+    if (!Number.isFinite(unit) || unit <= 0) {
+      notify("⚠️ Вкажи актуальну ціну ETF перед додаванням!", "amber");
+      return;
+    }
 
     const selectedGoal = goals.some((g) => g.id === goalId) ? goalId : FIRE_GOAL_ID;
     onChange((list) => buyOrUpdateAsset(list, query, qty, unit, selectedGoal));
@@ -295,7 +309,7 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify }: Props) {
             onClick={() => select(t)}
             className="text-[11px] bg-slate-800 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/60 px-2.5 py-1 rounded-lg font-bold transition"
           >
-            {t} (${findCatalogItem(t)?.price.toFixed(2)})
+            {t}
           </button>
         ))}
         {QUICK_PICKS_OTHER.map((t) => (
@@ -389,11 +403,13 @@ function EtfDropdown({ query, onSelect }: { query: string; onSelect: (ticker: st
             <span className="font-extrabold text-white text-xs">{item.ticker}</span>
             <span className="text-[10px] bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded ml-1">{item.exchange}</span>
             {getLiveQuote(item.ticker) !== undefined && (
-              <span className="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1 py-0.5 rounded ml-1">🟢 Live</span>
+              <span className="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1 py-0.5 rounded ml-1">Yahoo</span>
             )}
             <span className="block text-[11px] text-slate-400 truncate max-w-[220px]">{item.name}</span>
           </div>
-          <span className="text-xs font-bold text-emerald-400 shrink-0">${(getKnownPrice(item.ticker) ?? item.price).toFixed(2)}</span>
+          {getKnownPrice(item.ticker) !== undefined && (
+            <span className="text-xs font-bold text-emerald-400 shrink-0">${getKnownPrice(item.ticker)!.toFixed(2)}</span>
+          )}
         </button>
       ))}
       {query && !items.some((i) => i.ticker === query) && (
