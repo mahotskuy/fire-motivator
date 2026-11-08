@@ -16,7 +16,7 @@ describe("AssetsPanel", () => {
 
     expect(html).toContain("Поточна ціна акції ($)");
     expect(html).toContain("Вартість позиції ($)");
-    expect(html).toContain('value="184.98"');
+    expect(html).toContain("$184.98");
     expect(html).toContain("$369.96");
     expect(html).not.toContain("Сер. купівля");
     expect(html).not.toContain('value="150"');

@@ -4,6 +4,7 @@ import { newId } from "../domain/genericAssets";
 import { today } from "../domain/format";
 import { canDeleteGoal, canEditGoal, isDeletedGoalTransaction } from "../domain/goals";
 import type { Asset, GenericAsset, Goal, Transaction } from "../domain/types";
+import { AddButton, DeleteConfirm, FormActions, KebabMenu, Sheet, SwipeRow, formInput, formLabel, useIsMobile } from "./rowKit";
 import type { Notify } from "./Toasts";
 
 interface Props {
@@ -31,59 +32,52 @@ export function GoalsPanel({
   onTransactionsChange,
   notify,
 }: Pick<Props, "goals" | "assets" | "genericAssets" | "balances" | "targetFireCapital" | "onGoalsChange" | "onTransactionsChange" | "notify">) {
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState("2027-12-31");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editAmount, setEditAmount] = useState("");
-  const [editDate, setEditDate] = useState("");
+  const mobile = useIsMobile();
+  const [sheet, setSheet] = useState<string | "add" | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const current = goals.find((g) => g.id === sheet);
+  const close = () => setSheet(null);
 
-  const startEdit = (goal: Goal) => {
-    if (!canEditGoal(goal)) return;
-    setEditingId(goal.id);
-    setEditName(goal.name);
-    setEditAmount(String(goal.targetAmount));
-    setEditDate(goal.targetDate);
-  };
+  const nameTaken = (name: string, exceptId?: string) => goals.some((g) => g.id !== exceptId && g.name === name);
 
-  const saveEdit = (goal: Goal) => {
-    const targetAmount = Number(editAmount);
-    const newName = editName.trim();
+  const saveEdit = (goal: Goal, v: GoalValues) => {
+    const targetAmount = Number(v.amount);
+    const newName = v.name.trim();
     if (!newName || !(targetAmount > 0)) {
       notify("⚠️ Введи назву цілі та цільову суму!", "amber");
       return;
     }
-    if (goals.some((g) => g.id !== goal.id && g.name === newName)) {
+    if (nameTaken(newName, goal.id)) {
       notify("⚠️ Ціль з такою назвою вже існує!", "amber");
       return;
     }
-    const targetDate = editDate || "2027-12-31";
+    const targetDate = v.date || "2027-12-31";
     onGoalsChange((list) => list.map((g) => (g.id === goal.id ? { ...g, name: newName, targetAmount, targetDate } : g)));
     if (newName !== goal.name) {
       onTransactionsChange((list) => list.map((t) => (t.goalId === goal.id ? { ...t, goalName: newName } : t)));
     }
     notify(`✏️ Ціль "${newName}" оновлено!`, "indigo");
-    setEditingId(null);
+    close();
   };
 
-  const add = () => {
-    const targetAmount = Number(amount);
-    if (!name.trim() || !(targetAmount > 0)) {
+  const add = (v: GoalValues) => {
+    const targetAmount = Number(v.amount);
+    const newName = v.name.trim();
+    if (!newName || !(targetAmount > 0)) {
       notify("⚠️ Введи назву цілі та цільову суму!", "amber");
       return;
     }
-    if (goals.some((g) => g.name === name.trim())) {
+    if (nameTaken(newName)) {
       notify("⚠️ Ціль з такою назвою вже існує!", "amber");
       return;
     }
-    onGoalsChange((list) => [...list, { id: newId("goal"), name: name.trim(), targetAmount, targetDate: date || "2027-12-31" }]);
-    notify(`🎯 Ціль "${name.trim()}" додано та збережено!`, "indigo");
-    setName("");
-    setAmount("");
+    onGoalsChange((list) => [...list, { id: newId("goal"), name: newName, targetAmount, targetDate: v.date || "2027-12-31" }]);
+    notify(`🎯 Ціль "${newName}" додано та збережено!`, "indigo");
+    close();
   };
 
-  const remove = (goal: Goal) => {
+  // Linked goals can't be deleted: explain instead of asking for confirmation.
+  const askDelete = (goal: Goal) => {
     const check = canDeleteGoal(goal.id, assets, genericAssets, goals);
     if (!check.ok) {
       notify(
@@ -94,8 +88,13 @@ export function GoalsPanel({
       );
       return;
     }
+    setConfirming(goal.id);
+  };
+
+  const dropGoal = (goal: Goal) => {
     onGoalsChange((list) => list.filter((g) => g.id !== goal.id));
     notify(`🗑️ Ціль "${goal.name}" видалено!`, "amber");
+    setConfirming(null);
   };
 
   return (
@@ -105,10 +104,13 @@ export function GoalsPanel({
           <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
             <span>🎯</span> Фінансові цілі (<code className="text-xs text-indigo-400">Goals</code>)
           </h2>
-          <span className="text-xs text-slate-400">Автозбереження</span>
         </div>
-        <p className="text-xs text-slate-400 mb-4">
+        <p className="text-xs text-slate-400 mb-1">
           Прогрес цілі = сума вартості активів, прив'язаних до неї (акції та інші активи). Транзакції — лише історія й на суми не впливають.
+        </p>
+        <p className="text-xs text-slate-500 mb-4">
+          <span className="sm:hidden">Свайпни картку вліво (або торкнись її), щоб змінити чи видалити ціль</span>
+          <span className="hidden sm:inline">Натисни ⋮, щоб змінити чи видалити ціль</span>
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -116,27 +118,9 @@ export function GoalsPanel({
             const saved = balances[g.id];
             const target = g.builtIn ? targetFireCapital : g.targetAmount;
             const p = getGoalProgress({ ...g, targetAmount: target }, saved ?? 0);
-            if (editingId === g.id) {
-              return (
-                <div key={g.id} className="bg-slate-950/60 border border-indigo-500/60 p-4 rounded-xl flex flex-col gap-2">
-                  <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className={`${field} focus:border-indigo-500`} />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input type="number" step="50" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className={`${field} focus:border-indigo-500`} />
-                    <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className={`${field} focus:border-indigo-500`} />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setEditingId(null)} className="text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5">
-                      Скасувати
-                    </button>
-                    <button type="button" onClick={() => saveEdit(g)} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl px-3 py-1.5 text-xs">
-                      Зберегти
-                    </button>
-                  </div>
-                </div>
-              );
-            }
-            return (
-              <div key={g.id} className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+            const editable = canEditGoal(g);
+            const card = (
+              <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl flex flex-col justify-between h-full">
                 <div>
                   <div className="flex justify-between items-start gap-2 mb-1">
                     <span className="font-bold text-sm text-white">{g.name}</span>
@@ -144,15 +128,10 @@ export function GoalsPanel({
                       <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
                         {g.builtIn ? "вбудована" : `до ${g.targetDate}`}
                       </span>
-                      {canEditGoal(g) && (
-                        <button type="button" onClick={() => startEdit(g)} title="Редагувати" className="text-slate-500 hover:text-indigo-400 text-xs">
-                          ✎
-                        </button>
-                      )}
-                      {!g.builtIn && (
-                        <button type="button" onClick={() => remove(g)} className="text-slate-500 hover:text-rose-400 text-xs">
-                          ✕
-                        </button>
+                      {editable && (
+                        <span className="hidden sm:inline-block -my-1.5 -mr-1.5">
+                          <KebabMenu onEdit={() => setSheet(g.id)} onDelete={() => askDelete(g)} />
+                        </span>
                       )}
                     </div>
                   </div>
@@ -182,25 +161,73 @@ export function GoalsPanel({
                 )}
               </div>
             );
+            return (
+              <div key={g.id}>
+                {mobile && editable ? (
+                  <div className="rounded-xl overflow-hidden">
+                    <SwipeRow onEdit={() => setSheet(g.id)} onDelete={() => askDelete(g)}>{card}</SwipeRow>
+                  </div>
+                ) : (
+                  card
+                )}
+                {confirming === g.id && <DeleteConfirm label={`"${g.name}"`} onYes={() => dropGoal(g)} onNo={() => setConfirming(null)} />}
+              </div>
+            );
           })}
         </div>
       </div>
 
-      <div className="mt-5 pt-4 border-t border-slate-800 bg-slate-950/60 p-4 rounded-xl">
-        <div className="text-xs font-bold text-slate-200 mb-2.5">➕ Додати нову ціль:</div>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-          <input type="text" placeholder="Назва (напр. 🚗 Авто)" value={name} onChange={(e) => setName(e.target.value)} className={`${field} sm:col-span-2 focus:border-indigo-500`} />
-          <input type="number" step="50" placeholder="Сума цілі ($)" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${field} focus:border-indigo-500`} />
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${field} focus:border-indigo-500`} />
-        </div>
-        <button
-          type="button"
-          onClick={add}
-          className="mt-2.5 w-full bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 font-bold rounded-xl py-2 text-xs transition"
-        >
-          + Зберегти ціль
-        </button>
+      <AddButton onClick={() => setSheet("add")} className="text-indigo-300 hover:border-indigo-500">
+        ＋ Додати ціль
+      </AddButton>
+
+      {sheet && (
+        <Sheet title={current ? `✏️ ${current.name}` : "➕ Нова ціль"} onClose={close}>
+          {current ? (
+            <GoalForm
+              key={current.id}
+              initial={{ name: current.name, amount: String(current.targetAmount), date: current.targetDate }}
+              onSubmit={(v) => saveEdit(current, v)}
+              onCancel={close}
+              onDelete={() => {
+                close();
+                askDelete(current);
+              }}
+            />
+          ) : (
+            <GoalForm initial={{ name: "", amount: "", date: "2027-12-31" }} onSubmit={add} onCancel={close} />
+          )}
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+interface GoalValues {
+  name: string;
+  amount: string;
+  date: string;
+}
+
+function GoalForm({ initial, onSubmit, onCancel, onDelete }: { initial: GoalValues; onSubmit: (v: GoalValues) => void; onCancel: () => void; onDelete?: () => void }) {
+  const [v, setV] = useState(initial);
+  return (
+    <div className="space-y-2">
+      <label className="block">
+        <span className={formLabel}>Назва</span>
+        <input type="text" placeholder="напр. 🚗 Авто" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} className={formInput} />
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <label>
+          <span className={formLabel}>Сума цілі ($)</span>
+          <input type="number" step="50" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} className={formInput} />
+        </label>
+        <label>
+          <span className={formLabel}>Дата</span>
+          <input type="date" value={v.date} onChange={(e) => setV({ ...v, date: e.target.value })} className={formInput} />
+        </label>
       </div>
+      <FormActions onSave={() => onSubmit(v)} onCancel={onCancel} onDelete={onDelete} />
     </div>
   );
 }
