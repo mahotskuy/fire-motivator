@@ -15,7 +15,7 @@ npm run build      # typecheck + production build into dist/
 
 ## PR preview
 
-Add the `deploy` label to a pull request in this repo: the `PR preview` workflow builds the app and attaches it as an artifact (kept 14 days), and posts a comment with instructions. Unzip the artifact and serve it with `python3 -m http.server 8000` next to the `fire-motivator/` folder, then open `http://localhost:8000/fire-motivator/`. Production (`main`) is unaffected.
+Deploy a branch to GitHub Pages for manual checking: add the `deploy` label to a pull request (it redeploys on every new commit), or run Actions → PR preview → Run workflow and pick the branch. The preview is served at `/fire-motivator/preview/` next to production (`/fire-motivator/`, always rebuilt from `main`). Only the latest preview exists and the next deploy from `main` removes it. The preview uses the same Firebase project as production, so it reads and writes the real data.
 
 ## Layout
 
