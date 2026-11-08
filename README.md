@@ -13,6 +13,10 @@ npm test           # unit tests for the calculations (src/domain)
 npm run build      # typecheck + production build into dist/
 ```
 
+## PR preview
+
+Add the `deploy` label to a pull request in this repo: the `PR preview` workflow builds the app and attaches it as an artifact (kept 14 days), and posts a comment with instructions. Unzip the artifact and serve it with `python3 -m http.server 8000` next to the `fire-motivator/` folder, then open `http://localhost:8000/fire-motivator/`. Production (`main`) is unaffected.
+
 ## Layout
 
 - `src/domain` – pure types, defaults and calculations (tested)

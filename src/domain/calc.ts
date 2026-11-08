@@ -1,5 +1,5 @@
 import type { Asset, Goal, Settings, Snapshot } from "./types";
-import { BILL_LEVELS } from "./defaults";
+import { BILL_LEVELS, DEFAULT_BILL_LEVEL_ORDER } from "./defaults";
 import { FIRE_GOAL_ID } from "./goals";
 
 export interface FireRules {
@@ -217,11 +217,21 @@ export interface BillCoverage {
   unlocked: boolean;
 }
 
-export function getBillCoverage(rules: FireRules, investedCapital: number) {
+// Капітал заповнює рівні у порядку `order` (зверху вниз), незалежно від порядку в BILL_LEVELS
+export function getBillCoverage(
+  rules: FireRules,
+  investedCapital: number,
+  order: number[] = DEFAULT_BILL_LEVEL_ORDER,
+) {
   const scaleFactor = rules.targetMonthlyPassive / 1000;
   let remaining = investedCapital;
+  const byId = new Map(BILL_LEVELS.map((bill) => [bill.id, bill]));
+  const ordered = order.flatMap((id) => {
+    const bill = byId.get(id);
+    return bill ? [bill] : [];
+  });
 
-  const levels: BillCoverage[] = BILL_LEVELS.map((bill) => {
+  const levels: BillCoverage[] = ordered.map((bill) => {
     const billCost = Math.round(bill.baseCost * scaleFactor);
     const neededCapital = rules.divDecimal > 0 ? Math.round((billCost * 12) / rules.divDecimal) : Infinity;
     const invested = Math.min(neededCapital, Math.max(0, remaining));
@@ -240,6 +250,16 @@ export function getBillCoverage(rules: FireRules, investedCapital: number) {
   });
 
   return { levels, unlockedCount: levels.filter((l) => l.unlocked).length };
+}
+
+// Пересуває рівень на одну позицію вгору (-1) або вниз (+1); на краю порядок не змінюється
+export function moveBillLevel(order: number[], id: number, direction: -1 | 1): number[] {
+  const index = order.indexOf(id);
+  const target = index + direction;
+  if (index === -1 || target < 0 || target >= order.length) return order;
+  const next = [...order];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
 }
 
 export interface SnapshotComparison {

@@ -188,8 +188,18 @@ function Row({ label, valueClass, children }: { label: string; valueClass: strin
 
 const formatUsd = (value: number) => (Number.isFinite(value) ? `$${Math.round(value).toLocaleString("uk-UA")}` : "∞");
 
-export function BillsPanel({ rules, investedCapital }: { rules: FireRules; investedCapital: number }) {
-  const { levels, unlockedCount } = getBillCoverage(rules, investedCapital);
+export function BillsPanel({
+  rules,
+  investedCapital,
+  order,
+  onMove,
+}: {
+  rules: FireRules;
+  investedCapital: number;
+  order: number[];
+  onMove: (id: number, direction: -1 | 1) => void;
+}) {
+  const { levels, unlockedCount } = getBillCoverage(rules, investedCapital, order);
 
   return (
     <div className="lg:col-span-5 bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between shadow-lg">
@@ -206,15 +216,37 @@ export function BillsPanel({ rules, investedCapital }: { rules: FireRules; inves
           </span>
         </div>
         <div className="space-y-3">
-          {levels.map((b) => (
+          {levels.map((b, index) => (
             <div
               key={b.id}
               className={`p-3 rounded-xl border ${b.unlocked ? "bg-emerald-950/20 border-emerald-800/60" : "bg-slate-950/50 border-slate-800"}`}
             >
-              <div className="flex justify-between items-center text-xs mb-1.5">
-                <span className={`font-semibold ${b.unlocked ? "text-emerald-300" : "text-slate-200"}`}>
-                  {b.icon} {b.name}
-                </span>
+              <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex flex-col shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onMove(b.id, -1)}
+                      disabled={index === 0}
+                      aria-label={`Підняти рівень «${b.name}» вище`}
+                      className="leading-none px-1 text-slate-400 hover:text-white disabled:opacity-25 disabled:hover:text-slate-400"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onMove(b.id, 1)}
+                      disabled={index === levels.length - 1}
+                      aria-label={`Опустити рівень «${b.name}» нижче`}
+                      className="leading-none px-1 text-slate-400 hover:text-white disabled:opacity-25 disabled:hover:text-slate-400"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                  <span className={`font-semibold truncate ${b.unlocked ? "text-emerald-300" : "text-slate-200"}`}>
+                    {b.icon} {b.name}
+                  </span>
+                </div>
                 <span className={`font-bold ${b.unlocked ? "text-emerald-400" : "text-slate-400"}`}>
                   {b.unlocked ? "✅" : `${b.pct.toFixed(0)}%`} · ${b.billCost}/міс дивідендів
                 </span>
