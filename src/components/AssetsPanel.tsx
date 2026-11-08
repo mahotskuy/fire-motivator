@@ -2,9 +2,11 @@ import { useRef, useState } from "react";
 import { buyOrUpdateAsset } from "../domain/calc";
 import { FIRE_GOAL_ID } from "../domain/goals";
 import type { Asset, Goal } from "../domain/types";
-import { ETF_CATALOG, QUICK_PICKS_IBKR, QUICK_PICKS_OTHER, findCatalogItem } from "../services/catalog";
+import { ETF_CATALOG, QUICK_PICKS_IBKR, QUICK_PICKS_OTHER } from "../services/catalog";
 import { fetchTickerPrice, getKnownPrice, getLiveQuote } from "../services/quotes";
 import type { Notify } from "./Toasts";
+import { AssetsList } from "./AssetsList";
+import { Select } from "./rowKit";
 
 interface Props {
   assets: Asset[];
@@ -14,8 +16,6 @@ interface Props {
   notify: Notify;
 }
 
-const cellClass =
-  "bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg px-2 py-1 text-xs focus:outline-none";
 const field =
   "w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs focus:outline-none";
 
@@ -44,19 +44,12 @@ export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Pr
     }
   };
 
-  const editField = (ticker: string, key: "shares" | "marketPrice", raw: string) => {
-    const num = Number(raw);
-    if (raw === "" || Number.isNaN(num) || num < 0) return;
-    const current = assets.find((a) => a.ticker === ticker);
-    if (!current || current[key] === num) return;
-    onChange((list) => list.map((a) => (a.ticker === ticker ? { ...a, [key]: num } : a)));
-    notify(`☁️ Збережено ${ticker} (${key}: ${num})`);
-  };
-
-  const editGoal = (ticker: string, goalId: string) => {
-    if (!goals.some((g) => g.id === goalId)) return;
-    onChange((list) => list.map((a) => (a.ticker === ticker ? { ...a, goalId } : a)));
-    notify(`🎯 ${ticker}: ціль змінено`, "indigo");
+  const saveAsset = (ticker: string, shares: number, marketPrice: number, goalId: string) => {
+    const current = assets.find((x) => x.ticker === ticker);
+    if (!current || !goals.some((g) => g.id === goalId)) return;
+    if (current.shares === shares && current.marketPrice === marketPrice && current.goalId === goalId) return;
+    onChange((list) => list.map((x) => (x.ticker === ticker ? { ...x, shares, marketPrice, goalId } : x)));
+    notify(`☁️ Збережено ${ticker}`);
   };
 
   const remove = (ticker: string) => {
@@ -73,7 +66,8 @@ export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Pr
               <span>📈</span> Портфель Interactive Brokers (<code className="text-xs text-emerald-400">Assets</code>)
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Редагуй кількість акцій (Shares) або ціну — при втраті фокусу зміни зберігаються автоматично
+              <span className="sm:hidden">Свайпни рядок вліво (або торкнись його), щоб змінити чи видалити позицію</span>
+              <span className="hidden sm:inline">Натисни ⋮, щоб змінити чи видалити позицію</span>
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -88,83 +82,21 @@ export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Pr
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs sm:text-sm">
-            <thead>
-              <tr className="border-b border-slate-800 text-[11px] text-slate-400 uppercase">
-                <th className="pb-2.5 pr-2">Інструмент</th>
-                <th className="pb-2.5 px-2">Позиція (Shares)</th>
-                <th className="pb-2.5 px-2">Поточна ціна акції ($)</th>
-                <th className="pb-2.5 px-2">Ціль</th>
-                <th className="pb-2.5 px-2 text-right">Вартість позиції ($)</th>
-                <th className="pb-2.5 pl-2 text-right" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {assets.map((asset) => {
-                const shares = Number(asset.shares) || 0;
-                const val = shares * (Number(asset.marketPrice) || 0);
-                return (
-                  <tr key={asset.ticker} className="hover:bg-slate-800/30 transition">
-                    <td className="py-2.5 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-extrabold text-white">{asset.ticker}</span>
-                        <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-semibold">
-                          {findCatalogItem(asset.ticker)?.exchange ?? "IBKR"}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-2">
-                      <NumberCell value={asset.shares} onCommit={(v) => editField(asset.ticker, "shares", v)} className="w-20 text-white font-semibold" />
-                    </td>
-                    <td className="py-2.5 px-2">
-                      <NumberCell value={asset.marketPrice} onCommit={(v) => editField(asset.ticker, "marketPrice", v)} className="w-24 text-emerald-400 font-bold" />
-                    </td>
-                    <td className="py-2.5 px-2">
-                      <select value={asset.goalId} onChange={(e) => editGoal(asset.ticker, e.target.value)} className={`${cellClass} max-w-[150px] text-slate-200`}>
-                        {goals.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="py-2.5 px-2 text-right font-bold text-white">
-                      ${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-2.5 pl-2 text-right">
-                      <button type="button" onClick={() => remove(asset.ticker)} className="text-slate-500 hover:text-rose-400 text-xs px-1.5 py-0.5 rounded" title="Видалити з портфеля">
-                        ✕
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <AssetsList
+          assets={assets}
+          goals={goals}
+          onSave={saveAsset}
+          onRemove={remove}
+          renderAddForm={(close) => (
+            <AddAssetForm assets={assets} goals={goals} monthlySave={monthlySave} onChange={onChange} notify={notify} onDone={close} />
+          )}
+        />
       </div>
-
-      <AddAssetForm assets={assets} goals={goals} monthlySave={monthlySave} onChange={onChange} notify={notify} />
     </div>
   );
 }
 
-function NumberCell({ value, onCommit, className }: { value: number; onCommit: (raw: string) => void; className: string }) {
-  return (
-    <input
-      key={value}
-      type="number"
-      step="0.01"
-      defaultValue={value}
-      onBlur={(e) => onCommit(e.target.value)}
-      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-      className={`${cellClass} ${className}`}
-    />
-  );
-}
-
-function AddAssetForm({ assets, goals, monthlySave, onChange, notify }: Props) {
+function AddAssetForm({ assets, goals, monthlySave, onChange, notify, onDone }: Props & { onDone?: () => void }) {
   const [ticker, setTicker] = useState("");
   const [goalId, setGoalId] = useState(FIRE_GOAL_ID);
   const [shares, setShares] = useState("");
@@ -285,11 +217,12 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify }: Props) {
     setPrice("");
     setOpen(false);
     setStatus(`✅ Додано ${query}!`);
+    onDone?.();
     notify(`🚀 Додано ${qty} шт. ${query} по $${unit}!`);
   };
 
   return (
-    <div className="mt-5 pt-4 border-t border-slate-800 bg-slate-950/70 p-4 rounded-xl space-y-3">
+    <div className="bg-slate-950/70 p-4 rounded-xl space-y-3">
       <div className="flex flex-wrap justify-between items-center gap-2">
         <span className="text-xs font-bold text-slate-200">➕ Додати ETF / акцію в портфель (обери зі списку або введи тікер):</span>
         <div className="flex items-center gap-3">
@@ -363,13 +296,7 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify }: Props) {
 
         <div className="sm:col-span-12 flex items-center gap-2 text-[11px] text-slate-400">
           <span>🎯 Ціль нової позиції (для вже наявного тікера ціль зберігається):</span>
-          <select value={goals.some((g) => g.id === goalId) ? goalId : FIRE_GOAL_ID} onChange={(e) => setGoalId(e.target.value)} className={`${cellClass} text-slate-200`}>
-            {goals.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
+          <Select className="w-44" value={goals.some((g) => g.id === goalId) ? goalId : FIRE_GOAL_ID} onChange={setGoalId} options={goals.map((g) => ({ value: g.id, label: g.name }))} />
         </div>
 
         <div className="sm:col-span-2">
@@ -425,3 +352,4 @@ function EtfDropdown({ query, onSelect }: { query: string; onSelect: (ticker: st
     </div>
   );
 }
+
