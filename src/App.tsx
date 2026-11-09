@@ -7,7 +7,7 @@ import { Header } from "./components/Header";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SnapshotsPanel } from "./components/SnapshotsPanel";
 import { ToastContainer, useToasts } from "./components/Toasts";
-import { getFireProgress, getFireRules } from "./domain/calc";
+import { getFireProgress, getFireRules, moveBillLevelTo } from "./domain/calc";
 import type { FxCache } from "./domain/currency";
 import { normalizeState } from "./domain/defaults";
 import type { AppState } from "./domain/types";
@@ -156,7 +156,12 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <BillsPanel rules={rules} investedCapital={wealth.fireStocks.totalMarketValue} />
+          <BillsPanel
+            rules={rules}
+            investedCapital={wealth.fireStocks.totalMarketValue}
+            order={state.billLevelOrder}
+            onMove={(id, toIndex) => patch("billLevelOrder", (order) => moveBillLevelTo(order, id, toIndex))}
+          />
           <AssetsPanel
             assets={state.assets}
             goals={state.goals}

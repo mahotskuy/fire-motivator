@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultState } from "./defaults";
+import { DEFAULT_BILL_LEVEL_ORDER, createDefaultState, normalizeBillLevelOrder, normalizeState } from "./defaults";
 import {
   buyOrUpdateAsset,
   calculateMonthsToTarget,
@@ -10,6 +10,8 @@ import {
   getPlannedCapitalForToday,
   getPortfolioTotals,
   getTimeBuyer,
+  moveBillLevel,
+  moveBillLevelTo,
 } from "./calc";
 
 const rules = getFireRules(createDefaultState().settings);
@@ -90,6 +92,58 @@ describe("getBillCoverage", () => {
   it("higherTargetIncome_ScalesBillCosts", () => {
     const doubled = getFireRules({ ...createDefaultState().settings, targetMonthlyPassive: 2000 });
     expect(getBillCoverage(doubled, 0).levels[0].billCost).toBe(40);
+  });
+});
+
+describe("billLevelOrder", () => {
+  it("customOrder_FillsLevelsTopToBottomInChosenOrder", () => {
+    const reversed = [...DEFAULT_BILL_LEVEL_ORDER].reverse();
+    const sixth = getBillCoverage(rules, 0).levels[5];
+    const { levels } = getBillCoverage(rules, sixth.neededCapital / 2, reversed);
+    expect(levels.map((l) => l.id)).toEqual(reversed);
+    expect(levels[0].id).toBe(6);
+    expect(levels[0].investedCapital).toBeCloseTo(sixth.neededCapital / 2, 5);
+    expect(levels[1].investedCapital).toBe(0);
+  });
+
+  it("moveBillLevel_SwapsWithNeighbour", () => {
+    expect(moveBillLevel([1, 2, 3], 2, -1)).toEqual([2, 1, 3]);
+    expect(moveBillLevel([1, 2, 3], 2, 1)).toEqual([1, 3, 2]);
+  });
+
+  it("moveBillLevel_AtEdgeOrUnknownId_ReturnsSameOrder", () => {
+    const order = [1, 2, 3];
+    expect(moveBillLevel(order, 1, -1)).toBe(order);
+    expect(moveBillLevel(order, 3, 1)).toBe(order);
+    expect(moveBillLevel(order, 9, 1)).toBe(order);
+  });
+
+  it("moveBillLevelTo_MovesToPositionAndShiftsOthers", () => {
+    expect(moveBillLevelTo([1, 2, 3, 4], 4, 0)).toEqual([4, 1, 2, 3]);
+    expect(moveBillLevelTo([1, 2, 3, 4], 1, 2)).toEqual([2, 3, 1, 4]);
+  });
+
+  it("moveBillLevelTo_SamePositionOrOutOfRange_ReturnsSameOrder", () => {
+    const order = [1, 2, 3];
+    expect(moveBillLevelTo(order, 2, 1)).toBe(order);
+    expect(moveBillLevelTo(order, 2, -1)).toBe(order);
+    expect(moveBillLevelTo(order, 2, 3)).toBe(order);
+    expect(moveBillLevelTo(order, 9, 0)).toBe(order);
+  });
+
+  it("moveBillLevel_DoesNotMutateInput", () => {
+    const order = [1, 2, 3];
+    moveBillLevel(order, 2, -1);
+    expect(order).toEqual([1, 2, 3]);
+  });
+
+  it("normalizeBillLevelOrder_DropsUnknownAndDuplicatesAndAppendsMissing", () => {
+    expect(normalizeBillLevelOrder([4, 4, 99, 1])).toEqual([4, 1, 2, 3, 5, 6]);
+    expect(normalizeBillLevelOrder(undefined)).toEqual(DEFAULT_BILL_LEVEL_ORDER);
+  });
+
+  it("normalizeState_LegacySaveWithoutOrder_UsesDefaultOrder", () => {
+    expect(normalizeState({}).billLevelOrder).toEqual(DEFAULT_BILL_LEVEL_ORDER);
   });
 });
 

@@ -88,4 +88,6 @@ export interface AppState {
   goals: Goal[];
   transactions: Transaction[];
   fx: FxCache | null;
+  // Порядок рівнів покриття рахунків: id з BILL_LEVELS, перший заповнюється першим
+  billLevelOrder: number[];
 }

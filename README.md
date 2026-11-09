@@ -13,6 +13,10 @@ npm test           # unit tests for the calculations (src/domain)
 npm run build      # typecheck + production build into dist/
 ```
 
+## PR preview
+
+Deploy a branch to GitHub Pages for manual checking: add the `deploy` label to a pull request (it redeploys on every new commit), or run Actions → PR preview → Run workflow and pick the branch. The preview is served at `/fire-motivator/preview/` next to production (`/fire-motivator/`, always rebuilt from `main`). Only the latest preview exists and the next deploy from `main` removes it. The preview uses the same Firebase project as production, so it reads and writes the real data.
+
 ## Layout
 
 - `src/domain` – pure types, defaults and calculations (tested)

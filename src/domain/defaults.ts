@@ -28,6 +28,22 @@ export const BILL_LEVELS: BillLevel[] = [
   { id: 6, name: "Подорожі, оновлення речей та резерв", icon: "✈️", baseCost: 200 },
 ];
 
+export const DEFAULT_BILL_LEVEL_ORDER: number[] = BILL_LEVELS.map((bill) => bill.id);
+
+// Лишає лише відомі рівні без повторів; відсутні (нові або пошкоджені збереження) дописуються в кінець стандартного порядку
+export function normalizeBillLevelOrder(raw: unknown): number[] {
+  const known = new Set(DEFAULT_BILL_LEVEL_ORDER);
+  const order: number[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const id = Number(item);
+      if (known.has(id) && !order.includes(id)) order.push(id);
+    }
+  }
+  for (const id of DEFAULT_BILL_LEVEL_ORDER) if (!order.includes(id)) order.push(id);
+  return order;
+}
+
 export function createDefaultState(): AppState {
   return {
     settings: {
@@ -60,6 +76,7 @@ export function createDefaultState(): AppState {
     transactions: [
       { date: "2026-09-05", goalName: "🛡️ Фінансова подушка", goalId: SAMPLE_CUSHION_ID, amount: 500, note: "Приклад" },
     ],
+    billLevelOrder: [...DEFAULT_BILL_LEVEL_ORDER],
   };
 }
 
@@ -187,6 +204,7 @@ export function normalizeState(parsed: unknown): AppState {
     goals,
     transactions: normalizeTransactions(p.transactions, goals, defaults.transactions),
     fx: normalizeFx(p.fx),
+    billLevelOrder: normalizeBillLevelOrder(p.billLevelOrder),
   };
 }
 

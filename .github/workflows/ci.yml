@@ -34,6 +34,9 @@ jobs:
 
   deploy:
     if: github.ref == 'refs/heads/main'
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     needs: check
     runs-on: ubuntu-latest
     permissions:
