@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { buyOrUpdateAsset } from "../domain/calc";
 import { FIRE_GOAL_ID } from "../domain/goals";
 import type { Asset, Goal } from "../domain/types";
@@ -16,8 +16,9 @@ interface Props {
   notify: Notify;
 }
 
+// text-base (16px) on phones: iOS Safari zooms the page on focus for any input under 16px.
 const field =
-  "w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs focus:outline-none";
+  "w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-base sm:text-xs focus:outline-none";
 
 export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Props) {
   const [refreshing, setRefreshing] = useState(false);
@@ -106,6 +107,15 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify, onDone }: 
   const [, bump] = useState(0);
   const tickerRef = useRef("");
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const sharesRef = useRef<HTMLInputElement>(null);
+  const selectSharesAfterRender = useRef(false);
+
+  // After a ticker is picked, the quantity field gets selected once React has applied its "1" default.
+  useEffect(() => {
+    if (!selectSharesAfterRender.current) return;
+    selectSharesAfterRender.current = false;
+    sharesRef.current?.select();
+  });
 
   const preview = (Number(shares) || 0) * (Number(price) || 0);
   const query = ticker.trim().toUpperCase();
@@ -149,6 +159,9 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify, onDone }: 
     const known = getKnownPrice(clean) ?? assets.find((a) => a.ticker === clean)?.marketPrice;
     if (known) setPrice(String(known));
     setOpen(false);
+    // Focus synchronously inside the tap handler so mobile browsers open the keyboard.
+    sharesRef.current?.focus();
+    selectSharesAfterRender.current = true;
     void applySelection(clean, true);
   };
 
@@ -273,7 +286,7 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify, onDone }: 
         </div>
 
         <div className="sm:col-span-2">
-          <input type="number" step="0.01" min="0.0001" placeholder="К-сть (1)" value={shares} onChange={(e) => setShares(e.target.value)} className={`${field} text-white font-semibold`} />
+          <input ref={sharesRef} type="number" step="0.01" min="0.0001" placeholder="К-сть (1)" value={shares} onChange={(e) => setShares(e.target.value)} className={`${field} text-white font-semibold`} />
         </div>
 
         <div className="sm:col-span-3 relative flex items-center">
