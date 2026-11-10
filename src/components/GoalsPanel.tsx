@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { getGoalProgress } from "../domain/calc";
 import { newId } from "../domain/genericAssets";
-import { today } from "../domain/format";
-import { canDeleteGoal, canEditGoal, isDeletedGoalTransaction } from "../domain/goals";
+import { canDeleteGoal, canEditGoal } from "../domain/goals";
 import type { Asset, GenericAsset, Goal, Transaction } from "../domain/types";
 import { AddButton, DeleteConfirm, FormActions, KebabMenu, Sheet, SwipeRow, formInput, formLabel, useIsMobile } from "./rowKit";
 import type { Notify } from "./Toasts";
@@ -19,8 +18,6 @@ interface Props {
   onTransactionsChange: (fn: (tx: Transaction[]) => Transaction[]) => void;
   notify: Notify;
 }
-
-const field = "bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none";
 
 export function GoalsPanel({
   goals,
@@ -98,7 +95,7 @@ export function GoalsPanel({
   };
 
   return (
-    <div className="lg:col-span-7 bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between shadow-lg">
+    <div className="bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between shadow-lg">
       <div>
         <div className="flex justify-between items-center mb-1">
           <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
@@ -228,78 +225,6 @@ function GoalForm({ initial, onSubmit, onCancel, onDelete }: { initial: GoalValu
         </label>
       </div>
       <FormActions onSave={() => onSubmit(v)} onCancel={onCancel} onDelete={onDelete} />
-    </div>
-  );
-}
-
-export function TransactionsPanel({ goals, transactions, onTransactionsChange, notify }: Pick<Props, "goals" | "transactions" | "onTransactionsChange" | "notify">) {
-  const [goalId, setGoalId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-
-  const selected = goals.some((g) => g.id === goalId) ? goalId : (goals[0]?.id ?? "");
-  const selectedGoal = goals.find((g) => g.id === selected);
-
-  const add = () => {
-    const value = Number(amount);
-    if (!selectedGoal || !(value > 0)) {
-      notify("⚠️ Вкажи суму поповнення цілі!", "amber");
-      return;
-    }
-    onTransactionsChange((list) => [...list, { date: today(), goalName: selectedGoal.name, goalId: selectedGoal.id, amount: value, note: note.trim() }]);
-    notify(`💳 Записано +$${value} в історію "${selectedGoal.name}"!`);
-    setAmount("");
-    setNote("");
-  };
-
-  return (
-    <div className="lg:col-span-5 bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between shadow-lg">
-      <div>
-        <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 mb-1">
-          <span>💳</span> Історія внесків (<code className="text-xs text-indigo-400">Transactions</code>)
-        </h2>
-        <p className="text-xs text-slate-400 mb-4">Лише журнал поповнень: на баланси цілей і загальні суми не впливає</p>
-
-        <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2.5 mb-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <select value={selected} onChange={(e) => setGoalId(e.target.value)} className={field}>
-              {goals.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-            <input type="number" step="10" placeholder="Сума поповнення ($)" value={amount} onChange={(e) => setAmount(e.target.value)} className={field} />
-          </div>
-          <div className="flex gap-2">
-            <input type="text" placeholder="Коментар (необов'язково)" value={note} onChange={(e) => setNote(e.target.value)} className={`${field} flex-1`} />
-            <button type="button" onClick={add} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl px-4 py-2 text-xs transition shrink-0">
-              + Внести
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-          {transactions
-            .slice()
-            .reverse()
-            .map((t, i) => (
-              <div key={i} className="flex justify-between items-center bg-slate-950/60 border border-slate-800/80 px-3 py-2 rounded-xl text-xs">
-                <div>
-                  <span className="font-semibold text-slate-200">{t.goalName}</span>
-                  {isDeletedGoalTransaction(t, goals) && (
-                    <span className="text-[10px] text-amber-400 ml-1.5">(ціль видалено)</span>
-                  )}
-                  <span className="text-[10px] text-slate-500 block">
-                    {t.date}
-                    {t.note ? ` • ${t.note}` : ""}
-                  </span>
-                </div>
-                <span className="font-bold text-emerald-400">+${Number(t.amount).toLocaleString("en-US")}</span>
-              </div>
-            ))}
-        </div>
-      </div>
     </div>
   );
 }
