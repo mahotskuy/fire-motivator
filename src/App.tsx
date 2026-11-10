@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { AssetsPanel } from "./components/AssetsPanel";
 import { BillsPanel, FireWidgets } from "./components/FireWidgets";
 import { GenericAssetsPanel } from "./components/GenericAssetsPanel";
-import { GoalsPanel, TransactionsPanel } from "./components/GoalsPanel";
+import { GoalsPanel } from "./components/GoalsPanel";
 import { Header } from "./components/Header";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SnapshotsPanel } from "./components/SnapshotsPanel";
@@ -190,24 +190,16 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
           notify={notify}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <GoalsPanel
-            goals={state.goals}
-            assets={state.assets}
-            genericAssets={state.genericAssets}
-            balances={balances}
-            targetFireCapital={rules.targetFireCapital}
-            onGoalsChange={(fn) => patch("goals", fn)}
-            onTransactionsChange={(fn) => patch("transactions", fn)}
-            notify={notify}
-          />
-          <TransactionsPanel
-            goals={state.goals}
-            transactions={state.transactions}
-            onTransactionsChange={(fn) => patch("transactions", fn)}
-            notify={notify}
-          />
-        </div>
+        <GoalsPanel
+          goals={state.goals}
+          assets={state.assets}
+          genericAssets={state.genericAssets}
+          balances={balances}
+          targetFireCapital={rules.targetFireCapital}
+          onGoalsChange={(fn) => patch("goals", fn)}
+          onTransactionsChange={(fn) => patch("transactions", fn)}
+          notify={notify}
+        />
       </div>
     </div>
   );
