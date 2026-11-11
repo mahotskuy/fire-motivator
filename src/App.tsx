@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AssetsPanel } from "./components/AssetsPanel";
 import { BillsPanel, FireWidgets } from "./components/FireWidgets";
 import { GenericAssetsPanel } from "./components/GenericAssetsPanel";
@@ -20,6 +20,13 @@ import { useFxRates } from "./hooks/useFxRates";
 import type { StateStorage } from "./storage/StateStorage";
 import { createFirestoreStorage } from "./storage/firestoreStorage";
 import { localStorageStorage } from "./storage/localStorageStorage";
+
+const TABS = [
+  { id: "fire", label: "FIRE" },
+  { id: "assets", label: "Активи" },
+  { id: "goals", label: "Цілі" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
 
 export default function App() {
   const auth = useAuth();
@@ -54,6 +61,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
   const { toasts, notify } = useToasts();
   const setFx = useCallback((fx: FxCache) => update((s) => ({ ...s, fx })), [update]);
   const { status: fxStatus, refresh: refreshFx } = useFxRates(loaded, setFx);
+  const [tab, setTab] = useState<TabId>("fire");
 
   const rules = useMemo(() => getFireRules(state.settings), [state.settings]);
   const wealth = useMemo(() => computeWealth(state), [state.assets, state.genericAssets, state.fx]);
@@ -137,31 +145,57 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
           onImport={importJson}
         />
 
-        <SettingsPanel
-          settings={state.settings}
-          retirementSummary={
-            fireAvailable
-              ? `🎯 Вихід на пенсію у ${progress.retireAge.toFixed(1)} років (через ${progress.yearsLeft} р. ${progress.remMonths} м.)`
-              : "🎯 Прогноз FIRE недоступний: немає курсу для активів, прив'язаних до FIRE"
-          }
-          onChange={(settings) => update((s) => ({ ...s, settings }))}
-        />
-
-        {fireAvailable ? (
-          <FireWidgets rules={rules} totals={wealth.fireStocks} staticCapital={wealth.fireGenericValue ?? 0} progress={progress} />
-        ) : (
+        {!fireAvailable && (
           <div className="bg-amber-950/30 border border-amber-800/60 text-amber-300 text-sm rounded-2xl p-5">
             ⚠️ Показники FIRE недоступні: немає курсу для {wealth.missingCurrencies.join(", ")}. Онови курси в блоці «Інші активи».
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div role="tablist" aria-label="Розділи" className="flex gap-1 border-b border-slate-800 overflow-x-auto">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              id={`tab-${t.id}`}
+              aria-selected={tab === t.id}
+              aria-controls={`panel-${t.id}`}
+              onClick={() => setTab(t.id)}
+              className={`px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px ${
+                tab === t.id
+                  ? "border-sky-400 text-white"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div role="tabpanel" id="panel-fire" aria-labelledby="tab-fire" hidden={tab !== "fire"} className="space-y-6">
+          <SettingsPanel
+            settings={state.settings}
+            retirementSummary={
+              fireAvailable
+                ? `🎯 Вихід на пенсію у ${progress.retireAge.toFixed(1)} років (через ${progress.yearsLeft} р. ${progress.remMonths} м.)`
+                : "🎯 Прогноз FIRE недоступний: немає курсу для активів, прив'язаних до FIRE"
+            }
+            onChange={(settings) => update((s) => ({ ...s, settings }))}
+          />
+
+          {fireAvailable && (
+            <FireWidgets rules={rules} totals={wealth.fireStocks} staticCapital={wealth.fireGenericValue ?? 0} progress={progress} />
+          )}
+
           <BillsPanel
             rules={rules}
             investedCapital={wealth.fireStocks.totalMarketValue}
             order={state.billLevelOrder}
             onMove={(id, toIndex) => patch("billLevelOrder", (order) => moveBillLevelTo(order, id, toIndex))}
           />
+        </div>
+
+        <div role="tabpanel" id="panel-assets" aria-labelledby="tab-assets" hidden={tab !== "assets"} className="space-y-6">
           <AssetsPanel
             assets={state.assets}
             goals={state.goals}
@@ -169,37 +203,39 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             onChange={(fn) => patch("assets", fn)}
             notify={notify}
           />
+
+          <GenericAssetsPanel
+            genericAssets={state.genericAssets}
+            goals={state.goals}
+            fx={state.fx}
+            fxStatus={fxStatus}
+            onRefreshFx={() => void refreshFx()}
+            onChange={(fn) => patch("genericAssets", fn)}
+            notify={notify}
+          />
+
+          <SnapshotsPanel
+            state={state}
+            totals={wealth.stocks}
+            wealth={wealth.combinedWealth}
+            fxFresh={fxStatus.fresh}
+            onChange={(fn) => patch("snapshots", fn)}
+            notify={notify}
+          />
         </div>
 
-        <GenericAssetsPanel
-          genericAssets={state.genericAssets}
-          goals={state.goals}
-          fx={state.fx}
-          fxStatus={fxStatus}
-          onRefreshFx={() => void refreshFx()}
-          onChange={(fn) => patch("genericAssets", fn)}
-          notify={notify}
-        />
-
-        <SnapshotsPanel
-          state={state}
-          totals={wealth.stocks}
-          wealth={wealth.combinedWealth}
-          fxFresh={fxStatus.fresh}
-          onChange={(fn) => patch("snapshots", fn)}
-          notify={notify}
-        />
-
-        <GoalsPanel
-          goals={state.goals}
-          assets={state.assets}
-          genericAssets={state.genericAssets}
-          balances={balances}
-          targetFireCapital={rules.targetFireCapital}
-          onGoalsChange={(fn) => patch("goals", fn)}
-          onTransactionsChange={(fn) => patch("transactions", fn)}
-          notify={notify}
-        />
+        <div role="tabpanel" id="panel-goals" aria-labelledby="tab-goals" hidden={tab !== "goals"} className="space-y-6">
+          <GoalsPanel
+            goals={state.goals}
+            assets={state.assets}
+            genericAssets={state.genericAssets}
+            balances={balances}
+            targetFireCapital={rules.targetFireCapital}
+            onGoalsChange={(fn) => patch("goals", fn)}
+            onTransactionsChange={(fn) => patch("transactions", fn)}
+            notify={notify}
+          />
+        </div>
       </div>
     </div>
   );
