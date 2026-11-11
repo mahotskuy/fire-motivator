@@ -22,11 +22,79 @@ import { createFirestoreStorage } from "./storage/firestoreStorage";
 import { localStorageStorage } from "./storage/localStorageStorage";
 
 const TABS = [
-  { id: "fire", label: "FIRE" },
-  { id: "assets", label: "Активи" },
-  { id: "goals", label: "Цілі" },
+  {
+    id: "fire",
+    label: "FIRE",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0" aria-hidden="true">
+        <circle cx="12" cy="13" r="8" />
+        <path d="M12 13l4-4" />
+      </svg>
+    ),
+  },
+  {
+    id: "assets",
+    label: "Активи",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0" aria-hidden="true">
+        <rect x="3" y="6" width="18" height="13" rx="2" />
+        <path d="M3 10h18" />
+      </svg>
+    ),
+  },
+  {
+    id: "goals",
+    label: "Цілі",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="4" />
+      </svg>
+    ),
+  },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
+
+// Desktop: left rail. Phone: fixed bottom bar. Both drive the same tab state.
+function SectionNav({ tab, onChange, variant }: { tab: TabId; onChange: (t: TabId) => void; variant: "rail" | "bottom" }) {
+  const isRail = variant === "rail";
+  return (
+    <nav
+      aria-label="Розділи"
+      className={
+        isRail
+          ? "hidden lg:flex lg:flex-col lg:w-44 lg:shrink-0 lg:sticky lg:top-8 lg:self-start gap-1"
+          : "fixed inset-x-0 bottom-0 z-40 lg:hidden grid grid-cols-3 gap-1 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-slate-900/95 backdrop-blur border-t border-slate-800"
+      }
+    >
+      {TABS.map((t) => {
+        const active = tab === t.id;
+        const base = isRail
+          ? "flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+          : "flex flex-col items-center gap-1 py-1 rounded-xl text-[11px] font-semibold transition-colors";
+        const state = isRail
+          ? active
+            ? "bg-sky-500/15 text-sky-300"
+            : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+          : active
+            ? "text-sky-300"
+            : "text-slate-400";
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onChange(t.id)}
+            aria-current={active ? "page" : undefined}
+            className={`${base} ${state}`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
 
 export default function App() {
   const auth = useAuth();
@@ -121,7 +189,9 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
   return (
     <div className="p-3 sm:p-6 lg:p-8">
       <ToastContainer toasts={toasts} />
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto lg:flex lg:gap-6">
+        <SectionNav tab={tab} onChange={setTab} variant="rail" />
+        <div className="flex-1 min-w-0 space-y-6 pb-24 lg:pb-0">
         {account && (
           <div className="flex flex-wrap justify-end items-center gap-3 text-[11px] text-slate-400">
             <span>{account.email}</span>
@@ -151,28 +221,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
           </div>
         )}
 
-        <div role="tablist" aria-label="Розділи" className="flex gap-1 border-b border-slate-800 overflow-x-auto">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              id={`tab-${t.id}`}
-              aria-selected={tab === t.id}
-              aria-controls={`panel-${t.id}`}
-              onClick={() => setTab(t.id)}
-              className={`px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px ${
-                tab === t.id
-                  ? "border-sky-400 text-white"
-                  : "border-transparent text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <div role="tabpanel" id="panel-fire" aria-labelledby="tab-fire" hidden={tab !== "fire"} className="space-y-6">
+        <div id="panel-fire" hidden={tab !== "fire"} className="space-y-6">
           <SettingsPanel
             settings={state.settings}
             retirementSummary={
@@ -195,7 +244,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
           />
         </div>
 
-        <div role="tabpanel" id="panel-assets" aria-labelledby="tab-assets" hidden={tab !== "assets"} className="space-y-6">
+        <div id="panel-assets" hidden={tab !== "assets"} className="space-y-6">
           <AssetsPanel
             assets={state.assets}
             goals={state.goals}
@@ -224,7 +273,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
           />
         </div>
 
-        <div role="tabpanel" id="panel-goals" aria-labelledby="tab-goals" hidden={tab !== "goals"} className="space-y-6">
+        <div id="panel-goals" hidden={tab !== "goals"} className="space-y-6">
           <GoalsPanel
             goals={state.goals}
             assets={state.assets}
@@ -236,7 +285,9 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             notify={notify}
           />
         </div>
+        </div>
       </div>
+      <SectionNav tab={tab} onChange={setTab} variant="bottom" />
     </div>
   );
 }
