@@ -130,6 +130,11 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
   const setFx = useCallback((fx: FxCache) => update((s) => ({ ...s, fx })), [update]);
   const { status: fxStatus, refresh: refreshFx } = useFxRates(loaded, setFx);
   const [tab, setTab] = useState<TabId>("fire");
+  const changeTab = useCallback((t: TabId) => {
+    setTab(t);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  }, []);
 
   const rules = useMemo(() => getFireRules(state.settings), [state.settings]);
   const wealth = useMemo(() => computeWealth(state), [state.assets, state.genericAssets, state.fx]);
@@ -190,7 +195,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
     <div className="p-3 sm:p-6 lg:p-8">
       <ToastContainer toasts={toasts} />
       <div className="max-w-7xl mx-auto lg:flex lg:gap-6">
-        <SectionNav tab={tab} onChange={setTab} variant="rail" />
+        <SectionNav tab={tab} onChange={changeTab} variant="rail" />
         <div className="flex-1 min-w-0 space-y-6 pb-24 lg:pb-0">
         {account && (
           <div className="flex flex-wrap justify-end items-center gap-3 text-[11px] text-slate-400">
@@ -287,7 +292,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
         </div>
         </div>
       </div>
-      <SectionNav tab={tab} onChange={setTab} variant="bottom" />
+      <SectionNav tab={tab} onChange={changeTab} variant="bottom" />
     </div>
   );
 }
