@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AssetsPanel } from "./components/AssetsPanel";
 import { BillsPanel, FireWidgets } from "./components/FireWidgets";
 import { GenericAssetsPanel } from "./components/GenericAssetsPanel";
@@ -20,6 +20,91 @@ import { useFxRates } from "./hooks/useFxRates";
 import type { StateStorage } from "./storage/StateStorage";
 import { createFirestoreStorage } from "./storage/firestoreStorage";
 import { localStorageStorage } from "./storage/localStorageStorage";
+
+const TABS = [
+  {
+    id: "analytics",
+    label: "Analytics",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0" aria-hidden="true">
+        <path d="M3 3v18h18" />
+        <path d="M7 15v-4M12 15V7M17 15v-6" />
+      </svg>
+    ),
+  },
+  {
+    id: "fire",
+    label: "FIRE",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0" aria-hidden="true">
+        <circle cx="12" cy="13" r="8" />
+        <path d="M12 13l4-4" />
+      </svg>
+    ),
+  },
+  {
+    id: "assets",
+    label: "Активи",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0" aria-hidden="true">
+        <rect x="3" y="6" width="18" height="13" rx="2" />
+        <path d="M3 10h18" />
+      </svg>
+    ),
+  },
+  {
+    id: "goals",
+    label: "Цілі",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="4" />
+      </svg>
+    ),
+  },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
+// Desktop: left rail. Phone: fixed bottom bar. Both drive the same tab state.
+function SectionNav({ tab, onChange, variant }: { tab: TabId; onChange: (t: TabId) => void; variant: "rail" | "bottom" }) {
+  const isRail = variant === "rail";
+  return (
+    <nav
+      aria-label="Розділи"
+      className={
+        isRail
+          ? "hidden lg:flex lg:flex-col lg:w-44 lg:shrink-0 lg:sticky lg:top-8 lg:self-start gap-1"
+          : "fixed inset-x-0 bottom-0 z-40 lg:hidden grid grid-cols-4 gap-1 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-slate-900/95 backdrop-blur border-t border-slate-800"
+      }
+    >
+      {TABS.map((t) => {
+        const active = tab === t.id;
+        const base = isRail
+          ? "flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+          : "flex flex-col items-center gap-1 py-1 rounded-xl text-[11px] font-semibold transition-colors";
+        const state = isRail
+          ? active
+            ? "bg-sky-500/15 text-sky-300"
+            : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+          : active
+            ? "text-sky-300"
+            : "text-slate-400";
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onChange(t.id)}
+            aria-current={active ? "page" : undefined}
+            className={`${base} ${state}`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
 
 export default function App() {
   const auth = useAuth();
@@ -54,6 +139,12 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
   const { toasts, notify } = useToasts();
   const setFx = useCallback((fx: FxCache) => update((s) => ({ ...s, fx })), [update]);
   const { status: fxStatus, refresh: refreshFx } = useFxRates(loaded, setFx);
+  const [tab, setTab] = useState<TabId>("analytics");
+  const changeTab = useCallback((t: TabId) => {
+    setTab(t);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  }, []);
 
   const rules = useMemo(() => getFireRules(state.settings), [state.settings]);
   const wealth = useMemo(() => computeWealth(state), [state.assets, state.genericAssets, state.fx]);
@@ -113,7 +204,9 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
   return (
     <div className="p-3 sm:p-6 lg:p-8">
       <ToastContainer toasts={toasts} />
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto lg:flex lg:gap-6">
+        <SectionNav tab={tab} onChange={changeTab} variant="rail" />
+        <div className="flex-1 min-w-0 space-y-6 pb-24 lg:pb-0">
         {account && (
           <div className="flex flex-wrap justify-end items-center gap-3 text-[11px] text-slate-400">
             <span>{account.email}</span>
@@ -125,43 +218,50 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             </button>
           </div>
         )}
-        <Header
-          rules={rules}
-          totals={wealth.stocks}
-          wealth={wealth.combinedWealth}
-          fireAvailable={fireAvailable}
-          progress={progress}
-          status={status}
-          storageLabel={storage.label}
-          onExport={exportJson}
-          onImport={importJson}
-        />
-
-        <SettingsPanel
-          settings={state.settings}
-          retirementSummary={
-            fireAvailable
-              ? `🎯 Вихід на пенсію у ${progress.retireAge.toFixed(1)} років (через ${progress.yearsLeft} р. ${progress.remMonths} м.)`
-              : "🎯 Прогноз FIRE недоступний: немає курсу для активів, прив'язаних до FIRE"
-          }
-          onChange={(settings) => update((s) => ({ ...s, settings }))}
-        />
-
-        {fireAvailable ? (
-          <FireWidgets rules={rules} totals={wealth.fireStocks} staticCapital={wealth.fireGenericValue ?? 0} progress={progress} />
-        ) : (
+        {!fireAvailable && (
           <div className="bg-amber-950/30 border border-amber-800/60 text-amber-300 text-sm rounded-2xl p-5">
             ⚠️ Показники FIRE недоступні: немає курсу для {wealth.missingCurrencies.join(", ")}. Онови курси в блоці «Інші активи».
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div id="panel-analytics" hidden={tab !== "analytics"} className="space-y-6">
+          <Header
+            rules={rules}
+            totals={wealth.stocks}
+            wealth={wealth.combinedWealth}
+            fireAvailable={fireAvailable}
+            progress={progress}
+            status={status}
+            storageLabel={storage.label}
+            onExport={exportJson}
+            onImport={importJson}
+          />
+        </div>
+
+        <div id="panel-fire" hidden={tab !== "fire"} className="space-y-6">
+          <SettingsPanel
+            settings={state.settings}
+            retirementSummary={
+              fireAvailable
+                ? `🎯 Вихід на пенсію у ${progress.retireAge.toFixed(1)} років (через ${progress.yearsLeft} р. ${progress.remMonths} м.)`
+                : "🎯 Прогноз FIRE недоступний: немає курсу для активів, прив'язаних до FIRE"
+            }
+            onChange={(settings) => update((s) => ({ ...s, settings }))}
+          />
+
+          {fireAvailable && (
+            <FireWidgets rules={rules} totals={wealth.fireStocks} staticCapital={wealth.fireGenericValue ?? 0} progress={progress} />
+          )}
+
           <BillsPanel
             rules={rules}
             investedCapital={wealth.fireStocks.totalMarketValue}
             order={state.billLevelOrder}
             onMove={(id, toIndex) => patch("billLevelOrder", (order) => moveBillLevelTo(order, id, toIndex))}
           />
+        </div>
+
+        <div id="panel-assets" hidden={tab !== "assets"} className="space-y-6">
           <AssetsPanel
             assets={state.assets}
             goals={state.goals}
@@ -169,38 +269,42 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             onChange={(fn) => patch("assets", fn)}
             notify={notify}
           />
+
+          <GenericAssetsPanel
+            genericAssets={state.genericAssets}
+            goals={state.goals}
+            fx={state.fx}
+            fxStatus={fxStatus}
+            onRefreshFx={() => void refreshFx()}
+            onChange={(fn) => patch("genericAssets", fn)}
+            notify={notify}
+          />
+
+          <SnapshotsPanel
+            state={state}
+            totals={wealth.stocks}
+            wealth={wealth.combinedWealth}
+            fxFresh={fxStatus.fresh}
+            onChange={(fn) => patch("snapshots", fn)}
+            notify={notify}
+          />
         </div>
 
-        <GenericAssetsPanel
-          genericAssets={state.genericAssets}
-          goals={state.goals}
-          fx={state.fx}
-          fxStatus={fxStatus}
-          onRefreshFx={() => void refreshFx()}
-          onChange={(fn) => patch("genericAssets", fn)}
-          notify={notify}
-        />
-
-        <SnapshotsPanel
-          state={state}
-          totals={wealth.stocks}
-          wealth={wealth.combinedWealth}
-          fxFresh={fxStatus.fresh}
-          onChange={(fn) => patch("snapshots", fn)}
-          notify={notify}
-        />
-
-        <GoalsPanel
-          goals={state.goals}
-          assets={state.assets}
-          genericAssets={state.genericAssets}
-          balances={balances}
-          targetFireCapital={rules.targetFireCapital}
-          onGoalsChange={(fn) => patch("goals", fn)}
-          onTransactionsChange={(fn) => patch("transactions", fn)}
-          notify={notify}
-        />
+        <div id="panel-goals" hidden={tab !== "goals"} className="space-y-6">
+          <GoalsPanel
+            goals={state.goals}
+            assets={state.assets}
+            genericAssets={state.genericAssets}
+            balances={balances}
+            targetFireCapital={rules.targetFireCapital}
+            onGoalsChange={(fn) => patch("goals", fn)}
+            onTransactionsChange={(fn) => patch("transactions", fn)}
+            notify={notify}
+          />
+        </div>
+        </div>
       </div>
+      <SectionNav tab={tab} onChange={changeTab} variant="bottom" />
     </div>
   );
 }
