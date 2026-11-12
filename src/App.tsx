@@ -23,6 +23,16 @@ import { localStorageStorage } from "./storage/localStorageStorage";
 
 const TABS = [
   {
+    id: "analytics",
+    label: "Analytics",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0" aria-hidden="true">
+        <path d="M3 3v18h18" />
+        <path d="M7 15v-4M12 15V7M17 15v-6" />
+      </svg>
+    ),
+  },
+  {
     id: "fire",
     label: "FIRE",
     icon: (
@@ -64,7 +74,7 @@ function SectionNav({ tab, onChange, variant }: { tab: TabId; onChange: (t: TabI
       className={
         isRail
           ? "hidden lg:flex lg:flex-col lg:w-44 lg:shrink-0 lg:sticky lg:top-8 lg:self-start gap-1"
-          : "fixed inset-x-0 bottom-0 z-40 lg:hidden grid grid-cols-3 gap-1 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-slate-900/95 backdrop-blur border-t border-slate-800"
+          : "fixed inset-x-0 bottom-0 z-40 lg:hidden grid grid-cols-4 gap-1 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-slate-900/95 backdrop-blur border-t border-slate-800"
       }
     >
       {TABS.map((t) => {
@@ -129,7 +139,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
   const { toasts, notify } = useToasts();
   const setFx = useCallback((fx: FxCache) => update((s) => ({ ...s, fx })), [update]);
   const { status: fxStatus, refresh: refreshFx } = useFxRates(loaded, setFx);
-  const [tab, setTab] = useState<TabId>("fire");
+  const [tab, setTab] = useState<TabId>("analytics");
   const changeTab = useCallback((t: TabId) => {
     setTab(t);
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -208,23 +218,25 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             </button>
           </div>
         )}
-        <Header
-          rules={rules}
-          totals={wealth.stocks}
-          wealth={wealth.combinedWealth}
-          fireAvailable={fireAvailable}
-          progress={progress}
-          status={status}
-          storageLabel={storage.label}
-          onExport={exportJson}
-          onImport={importJson}
-        />
-
         {!fireAvailable && (
           <div className="bg-amber-950/30 border border-amber-800/60 text-amber-300 text-sm rounded-2xl p-5">
             ⚠️ Показники FIRE недоступні: немає курсу для {wealth.missingCurrencies.join(", ")}. Онови курси в блоці «Інші активи».
           </div>
         )}
+
+        <div id="panel-analytics" hidden={tab !== "analytics"} className="space-y-6">
+          <Header
+            rules={rules}
+            totals={wealth.stocks}
+            wealth={wealth.combinedWealth}
+            fireAvailable={fireAvailable}
+            progress={progress}
+            status={status}
+            storageLabel={storage.label}
+            onExport={exportJson}
+            onImport={importJson}
+          />
+        </div>
 
         <div id="panel-fire" hidden={tab !== "fire"} className="space-y-6">
           <SettingsPanel
