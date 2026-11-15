@@ -9,12 +9,13 @@ interface Props {
   yearGoal: number;
   retireAge: number;
   onAdd: () => void;
+  onOpenLevel: () => void;
 }
 
 const COMPACT_AFTER_PX = 40;
 
 // Липка смуга над усіма вкладками: наступний рівень, ціль року і кнопка внеску. Під час скролу стискається до одного рядка.
-export function FocusBar({ progress, year, yearInvested, yearGoal, retireAge, onAdd }: Props) {
+export function FocusBar({ progress, year, yearInvested, yearGoal, retireAge, onAdd, onOpenLevel }: Props) {
   const [compact, setCompact] = useState(false);
   useEffect(() => {
     const onScroll = () => setCompact(window.scrollY > COMPACT_AFTER_PX);
@@ -30,15 +31,21 @@ export function FocusBar({ progress, year, yearInvested, yearGoal, retireAge, on
   return (
     <div className="sticky top-2 z-30 bg-slate-900/95 backdrop-blur border border-slate-800 rounded-2xl shadow-xl px-3 py-2.5 sm:px-4">
       <div className="flex items-center gap-3">
-        <div
+        <button
+          type="button"
+          onClick={onOpenLevel}
+          aria-haspopup="dialog"
+          aria-label={`Рівень ${level}${next ? `, далі ${next.title}` : ""}: показати деталі`}
+          className="flex-1 min-w-0 flex items-center gap-3 text-left rounded-xl -m-1 p-1 hover:bg-slate-800/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400 transition-colors"
+        >
+        <span
           className={`${badge} shrink-0 flex flex-col items-center justify-center bg-indigo-500/15 border border-indigo-400/50 text-white font-extrabold leading-none transition-all`}
-          aria-label={`Рівень ${level}`}
         >
           {!compact && <span className="text-[8px] tracking-widest text-indigo-300 font-bold mb-0.5">РІВЕНЬ</span>}
           <span>{level}</span>
-        </div>
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex items-baseline justify-between gap-2 text-xs">
+        </span>
+        <span className="flex-1 min-w-0 block space-y-1.5">
+          <span className="flex items-baseline justify-between gap-2 text-xs">
             <span className="truncate text-slate-300">
               {next ? (
                 <>
@@ -49,18 +56,12 @@ export function FocusBar({ progress, year, yearInvested, yearGoal, retireAge, on
               )}
             </span>
             {next && <span className="shrink-0 tabular-nums text-slate-400">−${usd(toNext)}</span>}
-          </div>
-          <div
-            className="h-2.5 rounded-full bg-slate-800 overflow-hidden"
-            role="progressbar"
-            aria-label="Прогрес до наступного рівня"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(pct)}
-          >
-            <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-300 transition-[width] duration-700" style={{ width: `${Math.max(2, pct)}%` }} />
-          </div>
-        </div>
+          </span>
+          <span className="block h-2.5 rounded-full bg-slate-800 overflow-hidden">
+            <span className="block h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-300 transition-[width] duration-700" style={{ width: `${Math.max(2, pct)}%` }} />
+          </span>
+        </span>
+        </button>
         <button
           type="button"
           onClick={onAdd}

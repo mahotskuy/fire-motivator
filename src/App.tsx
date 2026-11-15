@@ -11,7 +11,8 @@ import { Header } from "./components/Header";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SnapshotsPanel } from "./components/SnapshotsPanel";
 import { ToastContainer, useToasts } from "./components/Toasts";
-import { getFireProgress, getFireRules, moveBillLevelTo } from "./domain/calc";
+import { calculateFractionalMonthsToTarget, getFireProgress, getFireRules, moveBillLevelTo } from "./domain/calc";
+import { LevelDialog } from "./components/LevelDialog";
 import type { FxCache } from "./domain/currency";
 import { normalizeState } from "./domain/defaults";
 import { getYearInvested } from "./domain/deposits";
@@ -147,6 +148,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
   const { status: fxStatus, refresh: refreshFx } = useFxRates(loaded, setFx);
   const [tab, setTab] = useState<TabId>("analytics");
   const [depositOpen, setDepositOpen] = useState(false);
+  const [levelOpen, setLevelOpen] = useState(false);
   const changeTab = useCallback((t: TabId) => {
     setTab(t);
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -228,6 +230,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             yearGoal={yearGoal}
             retireAge={progress.retireAge}
             onAdd={() => setDepositOpen(true)}
+            onOpenLevel={() => setLevelOpen(true)}
           />
         )}
         {account && (
@@ -346,6 +349,28 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
         </div>
       </div>
       <SectionNav tab={tab} onChange={changeTab} variant="bottom" />
+      {levelOpen && (
+        <LevelDialog
+          levels={levels}
+          progress={levelProgress}
+          capital={fireCapital}
+          rules={rules}
+          monthsTo={(target) =>
+            calculateFractionalMonthsToTarget(
+              wealth.fireStocks.totalMarketValue,
+              target,
+              rules.mandatoryMonthlySave,
+              rules.totalAnnualReturn,
+              wealth.fireGenericValue ?? 0,
+            )
+          }
+          onClose={() => setLevelOpen(false)}
+          onOpenAll={() => {
+            setLevelOpen(false);
+            changeTab("fire");
+          }}
+        />
+      )}
       {depositOpen && (
         <DepositSheet
           state={state}

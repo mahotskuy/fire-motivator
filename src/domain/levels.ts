@@ -2,18 +2,25 @@ import type { FireRules } from "./calc";
 import { BILL_LEVELS } from "./defaults";
 
 // Рівень — віха на шляху до FIRE. Кілька видів віх (дні свободи, круглий капітал, рахунки, % цілі) зливаються в одну лінійку.
+export type LevelKind = "freedom" | "capital" | "bill" | "percent" | "start";
+
 export interface Level {
   n: number;
   capital: number;
   icon: string;
   title: string;
+  kind: LevelKind;
+  // Інші віхи, що потрапили на цей самий рівень при злитті
+  also: string[];
 }
 
 interface RawLevel {
   capital: number;
   icon: string;
   title: string;
+  kind: LevelKind;
   priority: number;
+  also?: string[];
   // Поріг першої віхи групи: нові віхи зливаються з групою лише поки вони близько до неї, тож ланцюжок не розтягується
   anchor?: number;
 }
@@ -55,11 +62,11 @@ export function buildLevels(rules: FireRules): Level[] {
   for (let d = 425; d <= 1095; d += 61) days.push(d);
   for (let d = 1186; d <= 1825; d += 91) days.push(d);
   for (let d = 2007; d < 9125; d += 182) days.push(d);
-  for (const d of days) raw.push({ capital: d * dayCost, icon: "⏳", title: freedomDaysLabel(d), priority: 2 });
+  for (const d of days) raw.push({ capital: d * dayCost, icon: "⏳", title: freedomDaysLabel(d), kind: "freedom", priority: 2 });
 
-  for (let c = 2500; c <= 50000; c += 2500) raw.push({ capital: c, icon: "💰", title: `Капітал ${formatCapitalShort(c)}`, priority: 1 });
-  for (let c = 60000; c < target; c += 10000) raw.push({ capital: c, icon: "💰", title: `Капітал ${formatCapitalShort(c)}`, priority: 1 });
-  raw.push({ capital: 1000, icon: "🌱", title: "Перша $1,000", priority: 1 });
+  for (let c = 2500; c <= 50000; c += 2500) raw.push({ capital: c, icon: "💰", title: `Капітал ${formatCapitalShort(c)}`, kind: "capital", priority: 1 });
+  for (let c = 60000; c < target; c += 10000) raw.push({ capital: c, icon: "💰", title: `Капітал ${formatCapitalShort(c)}`, kind: "capital", priority: 1 });
+  raw.push({ capital: 1000, icon: "🌱", title: "Перша $1,000", kind: "start", priority: 1 });
 
   if (rules.divDecimal > 0) {
     const scale = rules.targetMonthlyPassive / 1000;
@@ -71,13 +78,14 @@ export function buildLevels(rules: FireRules): Level[] {
         capital: (cumulative * 12) / rules.divDecimal,
         icon: bill.icon,
         title: last ? "FIRE: дивіденди платять за все" : `Дивіденди платять: ${bill.name}`,
+        kind: "bill",
         priority: 4,
       });
     });
   }
 
   for (const pct of [1, 2, 3, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90]) {
-    raw.push({ capital: (target * pct) / 100, icon: "🎯", title: `${pct}% до FIRE`, priority: 0 });
+    raw.push({ capital: (target * pct) / 100, icon: "🎯", title: `${pct}% до FIRE`, kind: "percent", priority: pct % 25 === 0 ? 3 : 0 });
   }
 
   raw.sort((a, b) => a.capital - b.capital);
@@ -87,16 +95,57 @@ export function buildLevels(rules: FireRules): Level[] {
     if (last && m.capital <= (last.anchor ?? last.capital) * MERGE_RATIO) {
       // На злитому рівні лишається назва найціннішої віхи, а поріг — найвищий
       if (m.priority > last.priority) {
+        last.also = [...(last.also ?? []), last.title];
         last.icon = m.icon;
         last.title = m.title;
+        last.kind = m.kind;
         last.priority = m.priority;
+      } else {
+        last.also = [...(last.also ?? []), m.title];
       }
       last.capital = Math.max(last.capital, m.capital);
     } else {
       merged.push({ ...m, anchor: m.capital });
     }
   }
-  return merged.map((l, i) => ({ n: i + 1, capital: l.capital, icon: l.icon, title: l.title }));
+  return merged.map((l, i) => ({ n: i + 1, capital: l.capital, icon: l.icon, title: l.title, kind: l.kind, also: l.also ?? [] }));
+}
+
+export const LEVEL_KIND_LABEL: Record<LevelKind, string> = {
+  freedom: "Дні свободи",
+  capital: "Круглий капітал",
+  bill: "Рахунки з дивідендів",
+  percent: "Частка цілі FIRE",
+  start: "Початок шляху",
+};
+
+// Пояснення для вікна рівня: що саме означає ця віха при поточних налаштуваннях
+export function describeLevel(level: Level, rules: FireRules): string[] {
+  const dayCost = (rules.targetMonthlyPassive * 12) / 365;
+  const monthlyDividends = (level.capital * rules.divDecimal) / 12;
+  const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+  const yieldPct = +(rules.divDecimal * 100).toFixed(2);
+  switch (level.kind) {
+    case "freedom":
+      return [
+        `З капіталом ${money(level.capital)} ти покриваєш ≈ ${Math.round(level.capital / dayCost)} днів життя з витратами ${money(rules.targetMonthlyPassive)}/міс (${money(dayCost)} на день).`,
+        "Це запас: скільки днів ти міг би не працювати, якби довелося жити з накопиченого.",
+      ];
+    case "bill":
+      return [
+        `Дивіденди з ${money(level.capital)} (${yieldPct}% на рік) дають ≈ ${money(monthlyDividends)} на місяць.`,
+        "Цього вистачає, щоб портфель сам оплачував цей рахунок і всі, що вище в порядку покриття. Порядок можна змінити в блоці «Рівні покриття рахунків».",
+      ];
+    case "percent":
+      return [
+        `Ціль FIRE: ${money(rules.targetFireCapital)}. Це ${money(rules.targetMonthlyPassive)}/міс пасивного доходу при ${yieldPct}% дивідендів.`,
+        `${money(level.capital)} це ${Math.round((level.capital / rules.targetFireCapital) * 100)}% цієї суми.`,
+      ];
+    case "start":
+      return ["Перший тисячник. Найважче почати, далі капітал росте разом з внесками і дивідендами."];
+    default:
+      return [`Круглий капітал ${money(level.capital)}: позначка на шляху до ${money(rules.targetFireCapital)}.`];
+  }
 }
 
 // Скільки рівнів уже пройдено при цьому капіталі (0 — ще нічого)

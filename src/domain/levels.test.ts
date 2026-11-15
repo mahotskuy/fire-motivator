@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calculateFractionalMonthsToTarget, calculateMonthsToTarget, getFireRules } from "./calc";
 import { createDefaultState } from "./defaults";
-import { buildLevels, freedomDaysLabel, getLevelProgress, levelAt } from "./levels";
+import { LEVEL_KIND_LABEL, buildLevels, describeLevel, freedomDaysLabel, getLevelProgress, levelAt } from "./levels";
 
 const rules = getFireRules(createDefaultState().settings);
 const levels = buildLevels(rules);
@@ -90,6 +90,38 @@ describe("freedomDaysLabel", () => {
     expect(freedomDaysLabel(730)).toBe("2 роки свободи");
     expect(freedomDaysLabel(1186)).toBe("3 роки 3 міс свободи");
     expect(freedomDaysLabel(1460)).toBe("4 роки свободи");
+  });
+});
+
+describe("level kinds and descriptions", () => {
+  it("everyLevel_HasKnownKindAndAlsoList", () => {
+    for (const l of levels) {
+      expect(Object.keys(LEVEL_KIND_LABEL)).toContain(l.kind);
+      expect(Array.isArray(l.also)).toBe(true);
+    }
+  });
+
+  it("billLevel_ExplainsMonthlyDividendsFromItsCapital", () => {
+    const bill = levels.find((l) => l.kind === "bill")!;
+    const text = describeLevel(bill, rules).join(" ");
+    expect(text).toContain(`$${Math.round((bill.capital * 0.04) / 12)}`);
+  });
+
+  it("percentLevel_MentionsFireTargetAndShare", () => {
+    const pct = levels.find((l) => l.kind === "percent")!;
+    const text = describeLevel(pct, rules).join(" ");
+    expect(text).toContain("$300,000");
+    expect(text).toContain("%");
+  });
+
+  it("mergedMilestones_AreKeptOnTheWinningLevel", () => {
+    const merged = levels.find((l) => l.also.length > 0);
+    expect(merged).toBeDefined();
+    expect(merged!.also).not.toContain(merged!.title);
+  });
+
+  it("everyLevel_ProducesAtLeastOneDescriptionLine", () => {
+    for (const l of levels) expect(describeLevel(l, rules).length).toBeGreaterThan(0);
   });
 });
 
