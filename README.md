@@ -23,7 +23,7 @@ Deploy a branch to GitHub Pages for manual checking: add the `deploy` label to a
 - `src/storage` – persistence interface and adapters
 - `src/services` – ETF catalog and live quotes
 - `src/hooks/useFireState.ts` – app state with debounced autosave
-- `src/components` – UI panels
+- `src/components` – UI panels
 
-ETF quotes are requested from Yahoo Finance through public CORS proxies and may be delayed or unavailable. If all providers fail, the app leaves saved portfolio prices unchanged and reports which tickers failed; enter a price manually if necessary. Catalog prices are not used to update the portfolio.
+ETF quotes are requested from Yahoo Finance through public CORS proxies and may be delayed or unavailable. At most three tickers are requested at once, a request for the same ticker is shared, the provider that answered last is tried first, and a transient failure (timeout, network error, HTTP 429/5xx) gets one more round. If all providers fail, the app leaves saved portfolio prices unchanged and reports which tickers failed and why (per provider); enter a price manually if necessary. Catalog prices are not used to update the portfolio.
 The portfolio shows the current price per share and the total position value, without average purchase price or P&L columns. The saved average purchase price remains available for portfolio calculations.
