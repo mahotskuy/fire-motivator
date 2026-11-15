@@ -1,0 +1,8 @@
+name = "fire-motivator-quotes"
+main = "index.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+# Browser origins allowed to call the Worker (comma-separated, no trailing slash).
+# Change the first one if the site is served from a custom domain.
+ALLOWED_ORIGINS = "https://mahotskuy.github.io,http://localhost:5173"

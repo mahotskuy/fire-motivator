@@ -11,6 +11,6 @@ Next features, roughly in priority order.
 
 ## 3. Other
 - PWA (manifest + offline cache) for the phone home screen.
-- Reliable live prices: replace the free CORS proxies with a Cloud Function / own proxy.
+- ~~Reliable live prices: replace the free CORS proxies with a Cloud Function / own proxy.~~ (implemented as a Cloudflare Worker in `workers/quotes-proxy`, needs a one-time deploy and the `VITE_QUOTES_PROXY_URL` variable, see README)
 - Move UI strings to one place (currently inline Ukrainian) if a second language is needed.
 - Charts for snapshots history.
