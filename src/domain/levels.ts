@@ -1,5 +1,5 @@
 import type { FireRules } from "./calc";
-import { BILL_LEVELS } from "./defaults";
+import { BILL_LEVELS, DEFAULT_BILL_LEVEL_ORDER } from "./defaults";
 
 // Рівень — віха на шляху до FIRE. Кілька видів віх (дні свободи, круглий капітал, рахунки, % цілі) зливаються в одну лінійку.
 export type LevelKind = "freedom" | "capital" | "bill" | "percent" | "start";
@@ -12,6 +12,8 @@ export interface Level {
   kind: LevelKind;
   // Інші віхи, що потрапили на цей самий рівень при злитті
   also: string[];
+  // Лише для рівня-рахунку: скільки коштує цей рахунок на місяць
+  billCost?: number;
 }
 
 interface RawLevel {
@@ -21,6 +23,7 @@ interface RawLevel {
   kind: LevelKind;
   priority: number;
   also?: string[];
+  billCost?: number;
   // Поріг першої віхи групи: нові віхи зливаються з групою лише поки вони близько до неї, тож ланцюжок не розтягується
   anchor?: number;
 }
@@ -52,7 +55,8 @@ export function freedomDaysLabel(days: number): string {
   return `${years} ${plural(years, "рік", "роки", "років")}${months ? ` ${months} міс` : ""} свободи`;
 }
 
-export function buildLevels(rules: FireRules): Level[] {
+// `billOrder` — порядок рахунків, який користувач налаштував: рівні-рахунки йдуть саме в ньому
+export function buildLevels(rules: FireRules, billOrder: number[] = DEFAULT_BILL_LEVEL_ORDER): Level[] {
   const dayCost = (rules.targetMonthlyPassive * 12) / 365;
   const target = rules.targetFireCapital;
   const raw: RawLevel[] = [];
@@ -71,15 +75,18 @@ export function buildLevels(rules: FireRules): Level[] {
   if (rules.divDecimal > 0) {
     const scale = rules.targetMonthlyPassive / 1000;
     let cumulative = 0;
-    BILL_LEVELS.forEach((bill, i) => {
-      cumulative += Math.round(bill.baseCost * scale);
-      const last = i === BILL_LEVELS.length - 1;
+    const bills = billOrder.flatMap((id) => BILL_LEVELS.find((b) => b.id === id) ?? []);
+    bills.forEach((bill, i) => {
+      const cost = Math.round(bill.baseCost * scale);
+      cumulative += cost;
+      const last = i === bills.length - 1;
       raw.push({
         capital: (cumulative * 12) / rules.divDecimal,
         icon: bill.icon,
         title: last ? "FIRE: дивіденди платять за все" : `Дивіденди платять: ${bill.name}`,
         kind: "bill",
         priority: 4,
+        billCost: cost,
       });
     });
   }
@@ -93,22 +100,24 @@ export function buildLevels(rules: FireRules): Level[] {
   for (const m of raw) {
     const last = merged[merged.length - 1];
     if (last && m.capital <= (last.anchor ?? last.capital) * MERGE_RATIO) {
-      // На злитому рівні лишається назва найціннішої віхи, а поріг — найвищий
+      // На злитому рівні лишається найцінніша віха: її назва і її поріг
       if (m.priority > last.priority) {
         last.also = [...(last.also ?? []), last.title];
         last.icon = m.icon;
         last.title = m.title;
         last.kind = m.kind;
+        last.billCost = m.billCost;
         last.priority = m.priority;
+        // Поріг рівня — поріг віхи-переможця, щоб числа в поясненні (дивіденди, дні) були точними
+        last.capital = m.capital;
       } else {
         last.also = [...(last.also ?? []), m.title];
       }
-      last.capital = Math.max(last.capital, m.capital);
     } else {
       merged.push({ ...m, anchor: m.capital });
     }
   }
-  return merged.map((l, i) => ({ n: i + 1, capital: l.capital, icon: l.icon, title: l.title, kind: l.kind, also: l.also ?? [] }));
+  return merged.map((l, i) => ({ n: i + 1, capital: l.capital, icon: l.icon, title: l.title, kind: l.kind, also: l.also ?? [], ...(l.billCost !== undefined ? { billCost: l.billCost } : {}) }));
 }
 
 export const LEVEL_KIND_LABEL: Record<LevelKind, string> = {
@@ -134,7 +143,7 @@ export function describeLevel(level: Level, rules: FireRules): string[] {
     case "bill":
       return [
         `Дивіденди з ${money(level.capital)} (${yieldPct}% на рік) дають ≈ ${money(monthlyDividends)} на місяць.`,
-        "Цього вистачає, щоб портфель сам оплачував цей рахунок і всі, що вище в порядку покриття. Порядок можна змінити в блоці «Рівні покриття рахунків».",
+        "Цього вистачає, щоб портфель сам оплачував цей рахунок і всі, що вище в порядку покриття. Порядок рахунків можна змінити внизу списку рівнів на вкладці FIRE.",
       ];
     case "percent":
       return [

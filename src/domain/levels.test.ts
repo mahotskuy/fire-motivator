@@ -125,6 +125,29 @@ describe("level kinds and descriptions", () => {
   });
 });
 
+describe("bill levels follow the configured order", () => {
+  const billLevels = (order?: number[]) => buildLevels(rules, order).filter((l) => l.kind === "bill");
+
+  it("defaultOrder_ListsAllSixBillsAscendingWithTheirCost", () => {
+    const bills = billLevels();
+    expect(bills).toHaveLength(6);
+    expect(bills.map((b) => b.billCost)).toEqual([20, 80, 150, 350, 200, 200]);
+    expect(bills[bills.length - 1].title).toBe("FIRE: дивіденди платять за все");
+  });
+
+  it("reorderedBills_PutTheMovedBillFirstWithItsOwnCapital", () => {
+    const bills = billLevels([4, 1, 2, 3, 5, 6]);
+    expect(bills[0].billCost).toBe(350);
+    expect(bills[0].capital).toBeCloseTo((350 * 12) / 0.04, 5);
+    expect(bills[1].billCost).toBe(20);
+  });
+
+  it("anyOrder_StillEndsAtTheFireCapital", () => {
+    const bills = billLevels([6, 5, 4, 3, 2, 1]);
+    expect(bills[bills.length - 1].capital).toBeCloseTo(rules.targetFireCapital, 5);
+  });
+});
+
 describe("calculateFractionalMonthsToTarget", () => {
   it("integerStepCase_MatchesWholeMonthCalculation", () => {
     expect(calculateFractionalMonthsToTarget(0, 5000, 500, 0)).toBe(10);

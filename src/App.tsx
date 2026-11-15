@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { AssetsPanel } from "./components/AssetsPanel";
-import { BillsPanel, FireWidgets } from "./components/FireWidgets";
+import { FireWidgets } from "./components/FireWidgets";
 import { GenericAssetsPanel } from "./components/GenericAssetsPanel";
 import { DepositSheet } from "./components/DepositSheet";
 import { DepositsPanel } from "./components/DepositsPanel";
@@ -162,7 +162,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
     () => getFireProgress(rules, wealth.fireStocks, new Date(), wealth.fireGenericValue ?? 0),
     [rules, wealth],
   );
-  const levels = useMemo(() => buildLevels(rules), [rules]);
+  const levels = useMemo(() => buildLevels(rules, state.billLevelOrder), [rules, state.billLevelOrder]);
   const fireCapital = wealth.fireStocks.totalMarketValue + (wealth.fireGenericValue ?? 0);
   const levelProgress = useMemo(() => getLevelProgress(levels, fireCapital), [levels, fireCapital]);
   const year = new Date().getFullYear();
@@ -281,7 +281,16 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
         </div>
 
         <div id="panel-fire" hidden={tab !== "fire"} className="space-y-6">
-          {fireAvailable && <LevelsPanel levels={levels} capital={fireCapital} progress={levelProgress} />}
+          {fireAvailable && (
+            <LevelsPanel
+              levels={levels}
+              capital={fireCapital}
+              progress={levelProgress}
+              rules={rules}
+              billOrder={state.billLevelOrder}
+              onMoveBill={(id, toIndex) => patch("billLevelOrder", (order) => moveBillLevelTo(order, id, toIndex))}
+            />
+          )}
 
           <SettingsPanel
             settings={state.settings}
@@ -296,13 +305,6 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
           {fireAvailable && (
             <FireWidgets rules={rules} totals={wealth.fireStocks} staticCapital={wealth.fireGenericValue ?? 0} progress={progress} />
           )}
-
-          <BillsPanel
-            rules={rules}
-            investedCapital={wealth.fireStocks.totalMarketValue}
-            order={state.billLevelOrder}
-            onMove={(id, toIndex) => patch("billLevelOrder", (order) => moveBillLevelTo(order, id, toIndex))}
-          />
         </div>
 
         <div id="panel-assets" hidden={tab !== "assets"} className="space-y-6">

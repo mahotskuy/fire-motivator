@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from "react";
+import { getBillCoverage, type FireRules } from "../domain/calc";
 import { usd } from "../domain/format";
 import type { Level, LevelProgress } from "../domain/levels";
+import { BillsList } from "./FireWidgets";
 
 interface Props {
   levels: Level[];
   capital: number;
   progress: LevelProgress;
+  rules: FireRules;
+  billOrder: number[];
+  onMoveBill: (id: number, toIndex: number) => void;
 }
 
 const UPCOMING_SHOWN = 5;
 
-// Усі рівні до FIRE: пройдені, поточна ціль і те, що попереду. Поруч — «Рівні покриття рахунків», бо частина рівнів саме про рахунки.
-export function LevelsPanel({ levels, capital, progress }: Props) {
+// Усі рівні до FIRE в одному списку: пройдені, поточна ціль і те, що попереду. Рівні-рахунки (що оплачують дивіденди) — його частина;
+// їхній порядок налаштовується у згорнутому блоці внизу.
+export function LevelsPanel({ levels, capital, progress, rules, billOrder, onMoveBill }: Props) {
   const [showAll, setShowAll] = useState(false);
+  const [showBills, setShowBills] = useState(false);
+  const { unlockedCount, levels: bills } = getBillCoverage(rules, capital, billOrder);
   const currentRef = useRef<HTMLLIElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const { level, next, pct, toNext } = progress;
@@ -79,8 +87,9 @@ export function LevelsPanel({ levels, capital, progress }: Props) {
               >
                 {done ? "✓" : l.n}
               </span>
-              <span className="flex-1 min-w-0 truncate">
+              <span className="flex-1 min-w-0 break-words leading-snug">
                 {l.icon} {l.title}
+                {l.billCost !== undefined && <span className="text-slate-500"> · ${l.billCost}/міс</span>}
               </span>
               <span className="shrink-0 text-xs tabular-nums text-slate-400">${usd(l.capital)}</span>
             </li>
@@ -96,6 +105,37 @@ export function LevelsPanel({ levels, capital, progress }: Props) {
       >
         {showAll ? "Згорнути" : `Показати всі ${levels.length} рівнів`}
       </button>
+
+      <div className="border-t border-slate-800 pt-3">
+        <button
+          type="button"
+          onClick={() => setShowBills((v) => !v)}
+          aria-expanded={showBills}
+          className="w-full flex items-center justify-between gap-2 text-left text-sm font-bold text-slate-200 hover:text-white"
+        >
+          <span>🔓 Рахунки, які платять дивіденди</span>
+          <span className="flex items-center gap-2 shrink-0">
+            <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2.5 py-0.5 rounded-full">
+              {unlockedCount} / {bills.length}
+            </span>
+            <span className="text-slate-500 text-xs" aria-hidden="true">{showBills ? "▲" : "▼"}</span>
+          </span>
+        </button>
+        {!showBills && (
+          <div className="mt-2 flex gap-1.5" aria-hidden="true">
+            {bills.map((b) => (
+              <span key={b.id} title={b.name} className={`w-8 h-8 rounded-lg border flex items-center justify-center text-sm ${b.unlocked ? "bg-emerald-950/40 border-emerald-700/70" : "bg-slate-950/60 border-slate-800 opacity-60"}`}>
+                {b.icon}
+              </span>
+            ))}
+          </div>
+        )}
+        {showBills && (
+          <div className="mt-3">
+            <BillsList rules={rules} investedCapital={capital} order={billOrder} onMove={onMoveBill} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
