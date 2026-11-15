@@ -33,7 +33,9 @@ export function resetQuoteState(): void {
 
 interface Provider {
   name: string;
-  buildUrl: (yahooUrl: string) => string;
+  /** Always tried first, regardless of which provider answered last. */
+  pinned?: boolean;
+  buildUrl: (yahooUrl: string, symbol: string) => string;
   parse: (res: Response) => Promise<unknown>;
 }
 
@@ -43,7 +45,7 @@ interface YahooChart {
 
 const extractPrice = (data: YahooChart | null): unknown => data?.chart?.result?.[0]?.meta?.regularMarketPrice;
 
-const PROVIDERS: Provider[] = [
+const PUBLIC_PROVIDERS: Provider[] = [
   {
     name: "corsproxy",
     buildUrl: (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
@@ -61,6 +63,19 @@ const PROVIDERS: Provider[] = [
   },
 ];
 
+// Own Cloudflare Worker (workers/quotes-proxy). It returns Yahoo's chart JSON unchanged.
+function buildProviders(): Provider[] {
+  const base = String(import.meta.env.VITE_QUOTES_PROXY_URL ?? "").trim().replace(/\/+$/, "");
+  if (!base) return PUBLIC_PROVIDERS;
+  const own: Provider = {
+    name: "proxy",
+    pinned: true,
+    buildUrl: (_yahooUrl, symbol) => `${base}/?symbol=${encodeURIComponent(symbol)}`,
+    parse: async (res) => extractPrice(await res.json()),
+  };
+  return [own, ...PUBLIC_PROVIDERS];
+}
+
 const TIMEOUT_MS = 6000;
 const RETRY_DELAY_MS = 800;
 const MAX_ROUNDS = 2;
@@ -68,11 +83,11 @@ const MAX_CONCURRENT = 3;
 
 type Attempt = { price: number } | { error: string; transient: boolean };
 
-async function tryProvider(provider: Provider, yahooUrl: string): Promise<Attempt> {
+async function tryProvider(provider: Provider, yahooUrl: string, symbol: string): Promise<Attempt> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(provider.buildUrl(yahooUrl), { signal: controller.signal });
+    const res = await fetch(provider.buildUrl(yahooUrl, symbol), { signal: controller.signal });
     if (!res.ok) {
       const status = res.status;
       return {
@@ -94,10 +109,13 @@ async function tryProvider(provider: Provider, yahooUrl: string): Promise<Attemp
   }
 }
 
-// The provider that answered last goes first, so a dead one does not add its timeout to every ticker.
+// After the pinned provider, the one that answered last goes first, so a dead one does not add its timeout to every ticker.
 function orderedProviders(): Provider[] {
-  const i = PROVIDERS.findIndex((p) => p.name === preferredProvider);
-  return i > 0 ? [PROVIDERS[i], ...PROVIDERS.slice(0, i), ...PROVIDERS.slice(i + 1)] : PROVIDERS;
+  const all = buildProviders();
+  const pinned = all.filter((p) => p.pinned);
+  const rest = all.filter((p) => !p.pinned);
+  const i = rest.findIndex((p) => p.name === preferredProvider);
+  return [...pinned, ...(i > 0 ? [rest[i], ...rest.slice(0, i), ...rest.slice(i + 1)] : rest)];
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -112,7 +130,7 @@ async function requestQuote(ticker: string): Promise<QuoteResult | null> {
     errors = [];
     let transient = false;
     for (const provider of providers) {
-      const attempt = await tryProvider(provider, yahooUrl);
+      const attempt = await tryProvider(provider, yahooUrl, yahooSymbol);
       if ("price" in attempt) {
         preferredProvider = provider.name;
         liveQuotes.set(ticker, attempt.price);

@@ -12,6 +12,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -157,6 +158,54 @@ describe("fetchTickerPrice", () => {
     const settled = await Promise.all(results);
     expect(settled.every((q) => q?.price === 100)).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  describe("own proxy (VITE_QUOTES_PROXY_URL)", () => {
+    it("fetchTickerPrice_ProxyConfigured_AsksProxyFirstWithYahooSymbol", async () => {
+      vi.stubEnv("VITE_QUOTES_PROXY_URL", "https://quotes.example.workers.dev/");
+      const fetchMock = vi.fn().mockResolvedValue(okQuote(184.98));
+      vi.stubGlobal("fetch", fetchMock);
+
+      expect(await fetchTickerPrice("VWRA")).toEqual({ price: 184.98, source: "Yahoo Finance (VWRA.L)" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][0]).toBe("https://quotes.example.workers.dev/?symbol=VWRA.L");
+    });
+
+    it("fetchTickerPrice_ProxyDown_FallsBackToPublicProviders", async () => {
+      vi.stubEnv("VITE_QUOTES_PROXY_URL", "https://quotes.example.workers.dev");
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: false, status: 403 })
+        .mockResolvedValue(okQuote(704.5));
+      vi.stubGlobal("fetch", fetchMock);
+
+      expect(await fetchTickerPrice("VOO")).toEqual({ price: 704.5, source: "Yahoo Finance (VOO)" });
+      expect(fetchMock.mock.calls[0][0]).toContain("quotes.example.workers.dev");
+      expect(fetchMock.mock.calls[1][0]).toContain("corsproxy.io");
+    });
+
+    it("fetchTickerPrice_ProxyDownThenRecovers_IsTriedFirstAgain", async () => {
+      vi.stubEnv("VITE_QUOTES_PROXY_URL", "https://quotes.example.workers.dev");
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: false, status: 403 })
+        .mockResolvedValue(okQuote(100));
+      vi.stubGlobal("fetch", fetchMock);
+
+      await fetchTickerPrice("VOO");
+      await fetchTickerPrice("VTI");
+
+      expect(fetchMock.mock.calls[2][0]).toContain("quotes.example.workers.dev");
+    });
+
+    it("fetchTickerPrice_ProxyFails_ReportsItByName", async () => {
+      vi.stubEnv("VITE_QUOTES_PROXY_URL", "https://quotes.example.workers.dev");
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+
+      await fetchTickerPrice("VOO");
+
+      expect(getQuoteError("VOO")).toBe(
+        "proxy: HTTP 403; corsproxy: HTTP 403; codetabs: HTTP 403; allorigins: HTTP 403",
+      );
+    });
   });
 
   it("fetchTickerPrice_SecondProviderAnsweredLast_IsTriedFirstForNextTicker", async () => {
