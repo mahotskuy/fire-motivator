@@ -3,7 +3,7 @@ import { buyOrUpdateAsset } from "../domain/calc";
 import { FIRE_GOAL_ID } from "../domain/goals";
 import type { Asset, Goal } from "../domain/types";
 import { ETF_CATALOG, QUICK_PICKS_IBKR, QUICK_PICKS_OTHER } from "../services/catalog";
-import { fetchTickerPrice, getKnownPrice, getLiveQuote } from "../services/quotes";
+import { fetchTickerPrice, getKnownPrice, getLiveQuote, getQuoteError } from "../services/quotes";
 import type { Notify } from "./Toasts";
 import { AssetsList } from "./AssetsList";
 import { Select } from "./rowKit";
@@ -24,22 +24,31 @@ export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Pr
   const [refreshing, setRefreshing] = useState(false);
 
   const refreshAll = async () => {
-    if (!assets.length) return;
+    if (!assets.length || refreshing) return;
     setRefreshing(true);
     notify("🌐 Оновлюю ринкові котирування всіх ETF...", "indigo");
     const prices = new Map<string, number>();
     const failed: string[] = [];
-    for (const a of assets) {
-      const res = await fetchTickerPrice(a.ticker);
-      if (res && res.price > 0) prices.set(a.ticker, res.price);
-      else failed.push(a.ticker);
+    try {
+      const results = await Promise.all(
+        assets.map(async (a) => ({ ticker: a.ticker, res: await fetchTickerPrice(a.ticker) })),
+      );
+      for (const { ticker, res } of results) {
+        if (res && res.price > 0) prices.set(ticker, res.price);
+        else failed.push(ticker);
+      }
+      if (prices.size) {
+        onChange((list) => list.map((a) => (prices.has(a.ticker) ? { ...a, marketPrice: prices.get(a.ticker)! } : a)));
+      }
+    } finally {
+      setRefreshing(false);
     }
-    if (prices.size) {
-      onChange((list) => list.map((a) => (prices.has(a.ticker) ? { ...a, marketPrice: prices.get(a.ticker)! } : a)));
-    }
-    setRefreshing(false);
     if (failed.length) {
-      notify(`⚠️ Не вдалося оновити: ${failed.join(", ")}. Збережені ціни не змінено.`, "amber");
+      const reason = getQuoteError(failed[0]);
+      notify(
+        `⚠️ Не вдалося оновити: ${failed.join(", ")}. Збережені ціни не змінено.${reason ? ` Причина: ${reason}.` : ""}`,
+        "amber",
+      );
     } else {
       notify("✅ Ціни ETF оновлено та збережено!");
     }
@@ -148,7 +157,7 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify, onDone }: 
         setStatus(`🟢 ${clean}: $${res.price} (${res.source})`);
         bump((n) => n + 1);
       } else {
-        setStatus(`⚠️ ${clean}: ціну не отримано. Перевір або введи її вручну.`);
+        setStatus(`⚠️ ${clean}: ціну не отримано${quoteReason(clean)}. Перевір або введи її вручну.`);
       }
     }
   };
@@ -177,7 +186,7 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify, onDone }: 
       const res = await fetchTickerPrice(clean);
       if (!res || res.price <= 0) {
         if (tickerRef.current.trim().toUpperCase() === clean) {
-          setStatus(`⚠️ ${clean}: ціну не отримано. Перевір або введи її вручну.`);
+          setStatus(`⚠️ ${clean}: ціну не отримано${quoteReason(clean)}. Перевір або введи її вручну.`);
         }
         return;
       }
@@ -320,6 +329,11 @@ function AddAssetForm({ assets, goals, monthlySave, onChange, notify, onDone }: 
       </div>
     </div>
   );
+}
+
+function quoteReason(ticker: string): string {
+  const reason = getQuoteError(ticker);
+  return reason ? ` (${reason})` : "";
 }
 
 function filterCatalog(q: string) {
