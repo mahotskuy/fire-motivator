@@ -80,6 +80,26 @@ export interface Transaction {
   note: string;
 }
 
+export type DepositItem =
+  | { kind: "stock"; ticker: string; shares: number; price: number; usd: number; fire: boolean }
+  | { kind: "generic"; assetId: string; name: string; currency: Currency; amount: number; usd: number; fire: boolean };
+
+// Один збережений внесок: з нього малюються і підсумок після збереження, і картка «Останній внесок»
+export interface Deposit {
+  id: string;
+  date: string;
+  timestamp: string;
+  items: DepositItem[];
+  totalUsd: number;
+  fireUsd: number;
+  daysCloser: number;
+  projectedUsd: number;
+  monthlyDividends: number;
+  freedomDays: number;
+  levelBefore: number;
+  levelAfter: number;
+}
+
 export interface AppState {
   settings: Settings;
   assets: Asset[];
@@ -90,4 +110,7 @@ export interface AppState {
   fx: FxCache | null;
   // Порядок рівнів покриття рахунків: id з BILL_LEVELS, перший заповнюється першим
   billLevelOrder: number[];
+  deposits: Deposit[];
+  // Скільки вже вкладено в рік до першого внеску в застосунку: ключ — рік ("2026")
+  priorInvested: Record<string, number>;
 }

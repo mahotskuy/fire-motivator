@@ -1,6 +1,6 @@
 import { FOREIGN_CURRENCIES, isCurrency, type FxCache, type FxRates } from "./currency";
 import { FIRE_GOAL_ID, createFireGoal } from "./goals";
-import type { Asset, AppState, GenericAsset, Goal, Transaction } from "./types";
+import type { Asset, AppState, Deposit, DepositItem, GenericAsset, Goal, Transaction } from "./types";
 
 export interface BillLevel {
   id: number;
@@ -77,6 +77,8 @@ export function createDefaultState(): AppState {
       { date: "2026-09-05", goalName: "🛡️ Фінансова подушка", goalId: SAMPLE_CUSHION_ID, amount: 500, note: "Приклад" },
     ],
     billLevelOrder: [...DEFAULT_BILL_LEVEL_ORDER],
+    deposits: [],
+    priorInvested: {},
   };
 }
 
@@ -170,6 +172,53 @@ function normalizeTransactions(raw: unknown, goals: Goal[], fallback: Transactio
   return list;
 }
 
+const num = (v: unknown): number => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+function normalizeDepositItem(raw: unknown): DepositItem | null {
+  if (!isRecord(raw)) return null;
+  if (raw.kind === "stock" && typeof raw.ticker === "string" && raw.ticker) {
+    return { kind: "stock", ticker: raw.ticker, shares: num(raw.shares), price: num(raw.price), usd: num(raw.usd), fire: raw.fire !== false };
+  }
+  if (raw.kind === "generic" && typeof raw.assetId === "string" && typeof raw.name === "string" && isCurrency(raw.currency)) {
+    return { kind: "generic", assetId: raw.assetId, name: raw.name, currency: raw.currency, amount: num(raw.amount), usd: num(raw.usd), fire: raw.fire !== false };
+  }
+  return null;
+}
+
+function normalizeDeposits(raw: unknown): Deposit[] {
+  if (!Array.isArray(raw)) return [];
+  const list: Deposit[] = [];
+  for (const item of raw) {
+    if (!isRecord(item) || typeof item.id !== "string" || typeof item.date !== "string") continue;
+    const items = (Array.isArray(item.items) ? item.items : []).flatMap((i) => normalizeDepositItem(i) ?? []);
+    list.push({
+      id: item.id,
+      date: item.date,
+      timestamp: typeof item.timestamp === "string" ? item.timestamp : "",
+      items,
+      totalUsd: num(item.totalUsd),
+      fireUsd: num(item.fireUsd),
+      daysCloser: num(item.daysCloser),
+      projectedUsd: num(item.projectedUsd),
+      monthlyDividends: num(item.monthlyDividends),
+      freedomDays: num(item.freedomDays),
+      levelBefore: num(item.levelBefore),
+      levelAfter: num(item.levelAfter),
+    });
+  }
+  return list;
+}
+
+function normalizePriorInvested(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!isRecord(raw)) return out;
+  for (const [year, value] of Object.entries(raw)) {
+    const n = Number(value);
+    if (/^\d{4}$/.test(year) && Number.isFinite(n) && n > 0) out[year] = n;
+  }
+  return out;
+}
+
 function normalizeFx(raw: unknown): FxCache | null {
   if (!isRecord(raw) || !isRecord(raw.rates)) return null;
   const rates: FxRates = {};
@@ -205,6 +254,8 @@ export function normalizeState(parsed: unknown): AppState {
     transactions: normalizeTransactions(p.transactions, goals, defaults.transactions),
     fx: normalizeFx(p.fx),
     billLevelOrder: normalizeBillLevelOrder(p.billLevelOrder),
+    deposits: normalizeDeposits(p.deposits),
+    priorInvested: normalizePriorInvested(p.priorInvested),
   };
 }
 
