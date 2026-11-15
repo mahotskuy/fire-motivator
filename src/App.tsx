@@ -2,6 +2,9 @@ import { useCallback, useMemo, useState } from "react";
 import { AssetsPanel } from "./components/AssetsPanel";
 import { BillsPanel, FireWidgets } from "./components/FireWidgets";
 import { GenericAssetsPanel } from "./components/GenericAssetsPanel";
+import { DepositSheet } from "./components/DepositSheet";
+import { DepositsPanel } from "./components/DepositsPanel";
+import { FocusBar } from "./components/FocusBar";
 import { GoalsPanel } from "./components/GoalsPanel";
 import { Header } from "./components/Header";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -10,6 +13,8 @@ import { ToastContainer, useToasts } from "./components/Toasts";
 import { getFireProgress, getFireRules, moveBillLevelTo } from "./domain/calc";
 import type { FxCache } from "./domain/currency";
 import { normalizeState } from "./domain/defaults";
+import { getYearInvested } from "./domain/deposits";
+import { buildLevels, getLevelProgress } from "./domain/levels";
 import type { AppState } from "./domain/types";
 import { computeWealth, getGoalBalance } from "./domain/wealth";
 import { SignInScreen } from "./components/SignInScreen";
@@ -140,6 +145,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
   const setFx = useCallback((fx: FxCache) => update((s) => ({ ...s, fx })), [update]);
   const { status: fxStatus, refresh: refreshFx } = useFxRates(loaded, setFx);
   const [tab, setTab] = useState<TabId>("analytics");
+  const [depositOpen, setDepositOpen] = useState(false);
   const changeTab = useCallback((t: TabId) => {
     setTab(t);
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -153,6 +159,12 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
     () => getFireProgress(rules, wealth.fireStocks, new Date(), wealth.fireGenericValue ?? 0),
     [rules, wealth],
   );
+  const levels = useMemo(() => buildLevels(rules), [rules]);
+  const fireCapital = wealth.fireStocks.totalMarketValue + (wealth.fireGenericValue ?? 0);
+  const levelProgress = useMemo(() => getLevelProgress(levels, fireCapital), [levels, fireCapital]);
+  const year = new Date().getFullYear();
+  const yearGoal = rules.mandatoryMonthlySave * 12;
+  const yearInvested = getYearInvested(state.deposits, state.priorInvested, year);
   const balances = useMemo(
     () => Object.fromEntries(state.goals.map((g) => [g.id, getGoalBalance(g.id, state)])),
     [state.goals, state.assets, state.genericAssets, state.fx],
@@ -207,6 +219,16 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
       <div className="max-w-7xl mx-auto lg:flex lg:gap-6">
         <SectionNav tab={tab} onChange={changeTab} variant="rail" />
         <div className="flex-1 min-w-0 space-y-6 pb-24 lg:pb-0">
+        {fireAvailable && (
+          <FocusBar
+            progress={levelProgress}
+            year={year}
+            yearInvested={yearInvested}
+            yearGoal={yearGoal}
+            retireAge={progress.retireAge}
+            onAdd={() => setDepositOpen(true)}
+          />
+        )}
         {account && (
           <div className="flex flex-wrap justify-end items-center gap-3 text-[11px] text-slate-400">
             <span>{account.email}</span>
@@ -235,6 +257,22 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             storageLabel={storage.label}
             onExport={exportJson}
             onImport={importJson}
+          />
+          <DepositsPanel
+            deposits={state.deposits}
+            year={year}
+            yearInvested={yearInvested}
+            yearGoal={yearGoal}
+            priorInvested={state.priorInvested[String(year)] ?? 0}
+            onPriorChange={(amount) =>
+              update((s) => {
+                const next = { ...s.priorInvested };
+                if (amount > 0) next[String(year)] = amount;
+                else delete next[String(year)];
+                return { ...s, priorInvested: next };
+              })
+            }
+            onAdd={() => setDepositOpen(true)}
           />
         </div>
 
@@ -305,6 +343,25 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
         </div>
       </div>
       <SectionNav tab={tab} onChange={changeTab} variant="bottom" />
+      {depositOpen && (
+        <DepositSheet
+          state={state}
+          rules={rules}
+          levels={levels}
+          year={year}
+          yearInvested={yearInvested}
+          yearGoal={yearGoal}
+          onClose={() => setDepositOpen(false)}
+          onOpenAssets={() => {
+            setDepositOpen(false);
+            changeTab("assets");
+          }}
+          onCommit={(plan) => {
+            update((s) => ({ ...s, assets: plan.assets, genericAssets: plan.genericAssets, deposits: [plan.deposit, ...s.deposits] }));
+            notify("🚀 Внесок збережено!");
+          }}
+        />
+      )}
     </div>
   );
 }

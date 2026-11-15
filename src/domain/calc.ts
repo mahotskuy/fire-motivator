@@ -70,6 +70,24 @@ export function calculateMonthsToTarget(
   return months;
 }
 
+// Те саме, що calculateMonthsToTarget, але дробове: різниця між двома сценаріями не округлюється до цілих місяців
+export function calculateFractionalMonthsToTarget(
+  currentCapital: number,
+  targetCapital: number,
+  monthlySave: number,
+  annualReturn: number,
+  staticCapital = 0,
+): number {
+  const gap = targetCapital - staticCapital;
+  if (currentCapital >= gap) return 0;
+  const r = annualReturn / 12;
+  const MAX = 1200;
+  if (r === 0) return monthlySave > 0 ? Math.min(MAX, (gap - currentCapital) / monthlySave) : MAX;
+  const denom = currentCapital * r + monthlySave;
+  if (denom <= 0) return MAX;
+  return Math.min(MAX, Math.log((gap * r + monthlySave) / denom) / Math.log(1 + r));
+}
+
 export function getPortfolioTotals(assets: Asset[]): PortfolioTotals {
   let totalMarketValue = 0;
   let totalCostBasis = 0;
