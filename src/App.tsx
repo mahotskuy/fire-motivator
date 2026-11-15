@@ -6,6 +6,7 @@ import { DepositSheet } from "./components/DepositSheet";
 import { DepositsPanel } from "./components/DepositsPanel";
 import { FocusBar } from "./components/FocusBar";
 import { GoalsPanel } from "./components/GoalsPanel";
+import { LevelsPanel } from "./components/LevelsPanel";
 import { Header } from "./components/Header";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SnapshotsPanel } from "./components/SnapshotsPanel";
@@ -277,6 +278,8 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
         </div>
 
         <div id="panel-fire" hidden={tab !== "fire"} className="space-y-6">
+          {fireAvailable && <LevelsPanel levels={levels} capital={fireCapital} progress={levelProgress} />}
+
           <SettingsPanel
             settings={state.settings}
             retirementSummary={
