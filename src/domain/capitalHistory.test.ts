@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildCapitalHistory } from "./capitalHistory";
+import { getEtfAllocation } from "./allocation";
+import type { FireRules } from "./calc";
+import { buildCapitalHistory, buildPlanHistory } from "./capitalHistory";
 import type { Snapshot } from "./types";
 import type { Wealth } from "./wealth";
 
@@ -85,5 +87,40 @@ describe("buildCapitalHistory", () => {
     const noRates = { ...wealth, genericValue: null, combinedWealth: null };
     expect(buildCapitalHistory([], noRates, "wealth", "all", "2026-11-20")).toEqual([]);
     expect(buildCapitalHistory([], noRates, "stocks", "all", "2026-11-20")).toHaveLength(1);
+  });
+});
+
+describe("buildPlanHistory", () => {
+  const rules = {
+    targetMonthlyPassive: 1000,
+    mandatoryMonthlySave: 1000,
+    growthDecimal: 0.07,
+    divDecimal: 0,
+    totalAnnualReturn: 0,
+    targetFireCapital: 300_000,
+    currentAge: 30,
+    planStartDate: "2026-01-01",
+  } as unknown as FireRules;
+
+  it("buildPlanHistory_SnapshotsAndLive_PairsFireCapitalWithPlanForThatDate", () => {
+    const pts = buildPlanHistory([snap("2026-04-10", { fireValue: 3500 }), legacy("2026-02-01")], wealth, rules, "all", "2026-11-20");
+    expect(pts).toEqual([
+      { date: "2026-04-10", capital: 3500, plan: 3000, live: false },
+      { date: "2026-11-20", capital: 2300, plan: 10_000, live: true },
+    ]);
+  });
+});
+
+describe("getEtfAllocation", () => {
+  it("getEtfAllocation_Positions_SortsByValueWithShares", () => {
+    const res = getEtfAllocation([
+      { ticker: "SCHD", shares: 10, avgBuyPrice: 1, marketPrice: 25, goalId: "fire" },
+      { ticker: "VOO", shares: 1, avgBuyPrice: 1, marketPrice: 750, goalId: "fire" },
+      { ticker: "OLD", shares: 0, avgBuyPrice: 1, marketPrice: 10, goalId: "fire" },
+    ]);
+    expect(res.map((s) => [s.ticker, s.value, s.share])).toEqual([
+      ["VOO", 750, 0.75],
+      ["SCHD", 250, 0.25],
+    ]);
   });
 });

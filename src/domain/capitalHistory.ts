@@ -1,3 +1,4 @@
+import { getPlannedCapitalForToday, type FireRules } from "./calc";
 import { isLegacySnapshot } from "./snapshots";
 import type { Snapshot } from "./types";
 import type { Wealth } from "./wealth";
@@ -37,10 +38,25 @@ function cutoffDate(today: string, period: CapitalPeriod): string | null {
   return cut.toISOString().slice(0, 10);
 }
 
-/**
- * Точки графіка капіталу: по одній на день (з кількох знімків за день береться найпізніший),
- * плюс поточний стан як остання точка «зараз», що замінює знімок за сьогодні.
- */
+// З кількох знімків за день береться найпізніший
+function latestPerDay(snapshots: Snapshot[]): Snapshot[] {
+  const latest = new Map<string, Snapshot>();
+  for (const s of snapshots) {
+    const prev = latest.get(s.date);
+    if (!prev || s.timestamp > prev.timestamp) latest.set(s.date, s);
+  }
+  return [...latest.values()];
+}
+
+// Поточний стан як остання точка «зараз» замінює знімок за сьогодні; далі — фільтр періоду і сортування
+function finish<P extends { date: string }>(points: P[], live: P | null, period: CapitalPeriod, today: string): P[] {
+  const byDate = new Map(points.map((p) => [p.date, p]));
+  if (live) byDate.set(today, live);
+  const cut = cutoffDate(today, period);
+  return [...byDate.values()].filter((p) => !cut || p.date >= cut).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Точки графіка капіталу: по одній на день плюс поточний стан як остання точка «зараз». */
 export function buildCapitalHistory(
   snapshots: Snapshot[],
   current: Wealth | null,
@@ -48,19 +64,35 @@ export function buildCapitalHistory(
   period: CapitalPeriod,
   today: string,
 ): CapitalPoint[] {
-  const latest = new Map<string, Snapshot>();
-  for (const s of snapshots) {
-    const prev = latest.get(s.date);
-    if (!prev || s.timestamp > prev.timestamp) latest.set(s.date, s);
-  }
-  const byDate = new Map<string, CapitalPoint>();
-  for (const s of latest.values()) {
-    const p = fromSnapshot(s, scope);
-    if (p) byDate.set(p.date, p);
-  }
-  const live = current ? fromWealth(current, scope, today) : null;
-  if (live) byDate.set(today, live);
+  const points = latestPerDay(snapshots)
+    .map((s) => fromSnapshot(s, scope))
+    .filter((p): p is CapitalPoint => p !== null);
+  return finish(points, current ? fromWealth(current, scope, today) : null, period, today);
+}
 
-  const cut = cutoffDate(today, period);
-  return [...byDate.values()].filter((p) => !cut || p.date >= cut).sort((a, b) => a.date.localeCompare(b.date));
+export interface PlanPoint {
+  date: string;
+  // Капітал, прив'язаний до цілі FIRE — те саме, з чим порівнює план у шапці
+  capital: number;
+  plan: number;
+  live: boolean;
+}
+
+/** FIRE-капітал проти плану на кожну дату знімка. Старі знімки без fireValue пропускаються. */
+export function buildPlanHistory(
+  snapshots: Snapshot[],
+  current: Wealth | null,
+  rules: FireRules,
+  period: CapitalPeriod,
+  today: string,
+): PlanPoint[] {
+  const planAt = (date: string) => getPlannedCapitalForToday(rules, new Date(`${date}T12:00:00`));
+  const points = latestPerDay(snapshots)
+    .filter((s) => s.fireValue !== undefined)
+    .map((s) => ({ date: s.date, capital: s.fireValue!, plan: planAt(s.date), live: false }));
+  const live =
+    current && current.fireGenericValue !== null
+      ? { date: today, capital: current.fireStocks.totalMarketValue + current.fireGenericValue, plan: planAt(today), live: true }
+      : null;
+  return finish(points, live, period, today);
 }

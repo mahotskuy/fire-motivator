@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { AssetsPanel } from "./components/AssetsPanel";
-import { CapitalChart } from "./components/CapitalChart";
+import { CapitalCharts } from "./components/CapitalCharts";
 import { FireWidgets } from "./components/FireWidgets";
 import { GenericAssetsPanel } from "./components/GenericAssetsPanel";
 import { DepositSheet } from "./components/DepositSheet";
@@ -274,7 +274,13 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             onExport={exportJson}
             onImport={importJson}
           />
-          <CapitalChart snapshots={state.snapshots} wealth={wealth} onOpenSnapshots={() => changeTab("assets")} />
+          <CapitalCharts
+            snapshots={state.snapshots}
+            wealth={wealth}
+            assets={state.assets}
+            rules={rules}
+            onOpenSnapshots={() => changeTab("assets")}
+          />
           <DepositsPanel
             deposits={state.deposits}
             year={year}
