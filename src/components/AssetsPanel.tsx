@@ -3,6 +3,7 @@ import { buyOrUpdateAsset } from "../domain/calc";
 import { FIRE_GOAL_ID } from "../domain/goals";
 import type { Asset, Goal } from "../domain/types";
 import { ETF_CATALOG, QUICK_PICKS_IBKR, QUICK_PICKS_OTHER } from "../services/catalog";
+import type { PriceRefreshResult, PriceStatus } from "../hooks/useStockPrices";
 import { fetchTickerPrice, getKnownPrice, getLiveQuote, getQuoteError } from "../services/quotes";
 import type { Notify } from "./Toasts";
 import { AssetsList } from "./AssetsList";
@@ -16,37 +17,25 @@ interface Props {
   notify: Notify;
 }
 
+interface PanelProps extends Props {
+  priceStatus: PriceStatus;
+  onRefreshPrices: () => Promise<PriceRefreshResult>;
+}
+
 // text-base (16px) on phones: iOS Safari zooms the page on focus for any input under 16px.
 const field =
   "w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-base sm:text-xs focus:outline-none";
 
-export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Props) {
-  const [refreshing, setRefreshing] = useState(false);
+export function AssetsPanel({ assets, goals, monthlySave, onChange, notify, priceStatus, onRefreshPrices }: PanelProps) {
+  const refreshing = priceStatus.loading;
 
   const refreshAll = async () => {
     if (!assets.length || refreshing) return;
-    setRefreshing(true);
     notify("🌐 Оновлюю ринкові котирування всіх ETF...", "indigo");
-    const prices = new Map<string, number>();
-    const failed: string[] = [];
-    try {
-      const results = await Promise.all(
-        assets.map(async (a) => ({ ticker: a.ticker, res: await fetchTickerPrice(a.ticker) })),
-      );
-      for (const { ticker, res } of results) {
-        if (res && res.price > 0) prices.set(ticker, res.price);
-        else failed.push(ticker);
-      }
-      if (prices.size) {
-        onChange((list) => list.map((a) => (prices.has(a.ticker) ? { ...a, marketPrice: prices.get(a.ticker)! } : a)));
-      }
-    } finally {
-      setRefreshing(false);
-    }
+    const { failed, failReason } = await onRefreshPrices();
     if (failed.length) {
-      const reason = getQuoteError(failed[0]);
       notify(
-        `⚠️ Не вдалося оновити: ${failed.join(", ")}. Збережені ціни не змінено.${reason ? ` Причина: ${reason}.` : ""}`,
+        `⚠️ Не вдалося оновити: ${failed.join(", ")}. Збережені ціни не змінено.${failReason ? ` Причина: ${failReason}.` : ""}`,
         "amber",
       );
     } else {
@@ -89,6 +78,7 @@ export function AssetsPanel({ assets, goals, monthlySave, onChange, notify }: Pr
             >
               <span className={refreshing ? "animate-spin" : ""}>🌐</span> Оновити ціни
             </button>
+            <PriceStatusLine status={priceStatus} />
           </div>
         </div>
 
@@ -380,3 +370,18 @@ function EtfDropdown({ query, onSelect }: { query: string; onSelect: (ticker: st
   );
 }
 
+
+function PriceStatusLine({ status }: { status: PriceStatus }) {
+  if (status.loading) return <span className="text-[11px] text-slate-400">Оновлюю ціни…</span>;
+  if (status.failed.length) {
+    return (
+      <span className="text-[11px] text-amber-300" title={status.failReason}>
+        ⚠️ Без оновлення: {status.failed.join(", ")}
+      </span>
+    );
+  }
+  if (status.updatedAt) {
+    return <span className="text-[11px] text-slate-400">Ціни оновлено о {status.updatedAt.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</span>;
+  }
+  return null;
+}
