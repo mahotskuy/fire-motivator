@@ -52,6 +52,7 @@ export function useFireState(storage: StateStorage) {
   const update = useCallback((fn: (prev: AppState) => AppState) => {
     setState((prev) => {
       const next = fn(prev);
+      if (next === prev) return prev;
       latest.current = next;
       dirty.current = true;
       return next;

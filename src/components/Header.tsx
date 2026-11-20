@@ -2,6 +2,7 @@ import type { ChangeEvent } from "react";
 import type { FireProgress, FireRules, PortfolioTotals } from "../domain/calc";
 import { signed, usd } from "../domain/format";
 import type { SaveStatus } from "../hooks/useFireState";
+import type { PriceStatus } from "../hooks/useStockPrices";
 
 interface Props {
   rules: FireRules;
@@ -10,6 +11,7 @@ interface Props {
   fireAvailable: boolean;
   progress: FireProgress;
   status: SaveStatus;
+  priceStatus: PriceStatus;
   storageLabel: string;
   onExport: () => void;
   onImport: (file: File) => void;
@@ -27,7 +29,7 @@ function StatusBadge({ status, label }: { status: SaveStatus; label: string }) {
   return <span className={`${base} bg-slate-800 text-slate-300 border-slate-700`}>💾 {label}{time}</span>;
 }
 
-export function Header({ rules, totals, wealth, fireAvailable, progress, status, storageLabel, onExport, onImport }: Props) {
+export function Header({ rules, totals, wealth, fireAvailable, progress, status, priceStatus, storageLabel, onExport, onImport }: Props) {
   const onFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) onImport(file);
@@ -63,6 +65,7 @@ export function Header({ rules, totals, wealth, fireAvailable, progress, status,
                   : `🟡 ВІДСТАВАННЯ (-$${usd(Math.abs(progress.deltaToPlan))} від плану)`}
             </span>
             <StatusBadge status={status} label={storageLabel} />
+            <PriceBadge status={priceStatus} />
           </div>
           <p className="text-slate-400 text-xs sm:text-sm mt-1">
             План: <b className="text-slate-200">${rules.mandatoryMonthlySave}/міс</b> • Модель:{" "}
@@ -100,6 +103,23 @@ export function Header({ rules, totals, wealth, fireAvailable, progress, status,
       </div>
     </div>
   );
+}
+
+function PriceBadge({ status }: { status: PriceStatus }) {
+  const base = "text-xs font-bold px-3 py-1 rounded-full border flex items-center gap-1.5";
+  if (status.loading) {
+    return <span className={`${base} bg-indigo-950 text-indigo-300 border-indigo-800 animate-pulse`}>🌐 Оновлюю ціни…</span>;
+  }
+  if (status.failed.length) {
+    return (
+      <span className={`${base} bg-amber-950 text-amber-300 border-amber-800`} title={status.failReason}>
+        ⚠️ Старі ціни: {status.failed.join(", ")}
+      </span>
+    );
+  }
+  if (!status.updatedAt) return null;
+  const time = status.updatedAt.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
+  return <span className={`${base} bg-slate-800 text-slate-300 border-slate-700`}>🌐 Ціни на {time}</span>;
 }
 
 function Kpi({ label, value, className }: { label: string; value: string; className: string }) {

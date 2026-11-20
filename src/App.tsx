@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { AssetsPanel } from "./components/AssetsPanel";
+import { CapitalCharts } from "./components/CapitalCharts";
 import { FireWidgets } from "./components/FireWidgets";
 import { GenericAssetsPanel } from "./components/GenericAssetsPanel";
 import { DepositSheet } from "./components/DepositSheet";
@@ -24,6 +25,7 @@ import { db, isFirebaseConfigured } from "./firebase/client";
 import { useAuth } from "./hooks/useAuth";
 import { useFireState } from "./hooks/useFireState";
 import { useFxRates } from "./hooks/useFxRates";
+import { useStockPrices } from "./hooks/useStockPrices";
 import type { StateStorage } from "./storage/StateStorage";
 import { createFirestoreStorage } from "./storage/firestoreStorage";
 import { localStorageStorage } from "./storage/localStorageStorage";
@@ -146,6 +148,15 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
   const { toasts, notify } = useToasts();
   const setFx = useCallback((fx: FxCache) => update((s) => ({ ...s, fx })), [update]);
   const { status: fxStatus, refresh: refreshFx } = useFxRates(loaded, setFx);
+  const setAssets = useCallback(
+    (fn: (assets: AppState["assets"]) => AppState["assets"]) =>
+      update((s) => {
+        const assets = fn(s.assets);
+        return assets === s.assets ? s : { ...s, assets };
+      }),
+    [update],
+  );
+  const { status: priceStatus, refresh: refreshPrices } = useStockPrices(loaded, state.assets, setAssets);
   const [tab, setTab] = useState<TabId>("analytics");
   const [depositOpen, setDepositOpen] = useState(false);
   const [levelOpen, setLevelOpen] = useState(false);
@@ -258,9 +269,17 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             fireAvailable={fireAvailable}
             progress={progress}
             status={status}
+            priceStatus={priceStatus}
             storageLabel={storage.label}
             onExport={exportJson}
             onImport={importJson}
+          />
+          <CapitalCharts
+            snapshots={state.snapshots}
+            wealth={wealth}
+            assets={state.assets}
+            rules={rules}
+            onOpenSnapshots={() => changeTab("assets")}
           />
           <DepositsPanel
             deposits={state.deposits}
@@ -314,6 +333,8 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             monthlySave={rules.mandatoryMonthlySave}
             onChange={(fn) => patch("assets", fn)}
             notify={notify}
+            priceStatus={priceStatus}
+            onRefreshPrices={refreshPrices}
           />
 
           <GenericAssetsPanel

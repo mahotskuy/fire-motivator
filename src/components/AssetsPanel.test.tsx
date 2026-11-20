@@ -11,6 +11,8 @@ describe("AssetsPanel", () => {
         monthlySave={500}
         onChange={vi.fn()}
         notify={vi.fn()}
+        priceStatus={{ loading: false, updatedAt: null, failed: [] }}
+        onRefreshPrices={vi.fn()}
       />,
     );
 
