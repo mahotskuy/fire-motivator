@@ -5,6 +5,7 @@ import { FireWidgets } from "./components/FireWidgets";
 import { GenericAssetsPanel } from "./components/GenericAssetsPanel";
 import { DepositSheet } from "./components/DepositSheet";
 import { DepositsPanel } from "./components/DepositsPanel";
+import { AccountMenu } from "./components/AccountMenu";
 import { FocusBar } from "./components/FocusBar";
 import { GoalsPanel } from "./components/GoalsPanel";
 import { LevelsPanel } from "./components/LevelsPanel";
@@ -244,17 +245,14 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             onOpenLevel={() => setLevelOpen(true)}
           />
         )}
-        {account && (
-          <div className="flex flex-wrap justify-end items-center gap-3 text-[11px] text-slate-400">
-            <span>{account.email}</span>
-            <span>
-              UID: <code className="select-all text-slate-300">{account.uid}</code>
-            </span>
-            <button type="button" onClick={account.onSignOut} className="underline hover:text-slate-200">
-              Вийти
-            </button>
-          </div>
-        )}
+        <AccountMenu
+          email={account?.email}
+          status={status}
+          priceStatus={priceStatus}
+          onExport={exportJson}
+          onImport={importJson}
+          onSignOut={account?.onSignOut}
+        />
         {!fireAvailable && (
           <div className="bg-amber-950/30 border border-amber-800/60 text-amber-300 text-sm rounded-2xl p-5">
             ⚠️ Показники FIRE недоступні: немає курсу для {wealth.missingCurrencies.join(", ")}. Онови курси в блоці «Інші активи».
@@ -268,11 +266,7 @@ function Dashboard({ storage, account }: { storage: StateStorage; account?: Acco
             wealth={wealth.combinedWealth}
             fireAvailable={fireAvailable}
             progress={progress}
-            status={status}
             priceStatus={priceStatus}
-            storageLabel={storage.label}
-            onExport={exportJson}
-            onImport={importJson}
           />
           <CapitalCharts
             snapshots={state.snapshots}
