@@ -1,7 +1,5 @@
-import type { ChangeEvent } from "react";
 import type { FireProgress, FireRules, PortfolioTotals } from "../domain/calc";
 import { signed, usd } from "../domain/format";
-import type { SaveStatus } from "../hooks/useFireState";
 import type { PriceStatus } from "../hooks/useStockPrices";
 
 interface Props {
@@ -10,36 +8,13 @@ interface Props {
   wealth: number | null;
   fireAvailable: boolean;
   progress: FireProgress;
-  status: SaveStatus;
   priceStatus: PriceStatus;
-  storageLabel: string;
-  onExport: () => void;
-  onImport: (file: File) => void;
 }
 
-function StatusBadge({ status, label }: { status: SaveStatus; label: string }) {
-  const base = "text-xs font-bold px-3 py-1 rounded-full border flex items-center gap-1.5";
-  if (status.kind === "saving") {
-    return <span className={`${base} bg-amber-950 text-amber-300 border-amber-700 animate-pulse`}>⏳ Збереження...</span>;
-  }
-  if (status.kind === "error") {
-    return <span className={`${base} bg-rose-950 text-rose-300 border-rose-700`}>⚠️ Помилка збереження</span>;
-  }
-  const time = status.kind === "saved" ? ` • ${status.at.toLocaleTimeString("uk-UA")}` : "";
-  return <span className={`${base} bg-slate-800 text-slate-300 border-slate-700`}>💾 {label}{time}</span>;
-}
-
-export function Header({ rules, totals, wealth, fireAvailable, progress, status, priceStatus, storageLabel, onExport, onImport }: Props) {
-  const onFile = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) onImport(file);
-    e.target.value = "";
-  };
+export function Header({ rules, totals, wealth, fireAvailable, progress, priceStatus }: Props) {
   const onTrack = progress.deltaToPlan >= 0;
   const stockPnl = totals.totalMarketValue - totals.totalCostBasis;
   const stockPnlPct = totals.totalCostBasis > 0 ? (stockPnl / totals.totalCostBasis) * 100 : 0;
-  const btn =
-    "flex-1 sm:flex-none justify-center inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl transition";
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
@@ -64,7 +39,6 @@ export function Header({ rules, totals, wealth, fireAvailable, progress, status,
                   ? `🟢 ON TRACK (+$${usd(progress.deltaToPlan)} до плану)`
                   : `🟡 ВІДСТАВАННЯ (-$${usd(Math.abs(progress.deltaToPlan))} від плану)`}
             </span>
-            <StatusBadge status={status} label={storageLabel} />
             <PriceBadge status={priceStatus} />
           </div>
           <p className="text-slate-400 text-xs sm:text-sm mt-1">
@@ -77,16 +51,6 @@ export function Header({ rules, totals, wealth, fireAvailable, progress, status,
               ${rules.targetMonthlyPassive}/міс (${usd(rules.targetFireCapital)})
             </b>
           </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-          <button type="button" onClick={onExport} className={btn} title="Завантажити резервну копію JSON">
-            <span>📥</span> Експорт JSON
-          </button>
-          <label className={`${btn} cursor-pointer`} title="Відновити дані з JSON файлу">
-            <span>📤</span> Імпорт JSON
-            <input type="file" accept=".json" onChange={onFile} className="hidden" />
-          </label>
         </div>
       </div>
 
@@ -117,9 +81,8 @@ function PriceBadge({ status }: { status: PriceStatus }) {
       </span>
     );
   }
-  if (!status.updatedAt) return null;
-  const time = status.updatedAt.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
-  return <span className={`${base} bg-slate-800 text-slate-300 border-slate-700`}>🌐 Ціни на {time}</span>;
+  // Звичайний час оновлення цін показує меню акаунта; тут лишаються лише стани, що потребують уваги.
+  return null;
 }
 
 function Kpi({ label, value, className }: { label: string; value: string; className: string }) {
